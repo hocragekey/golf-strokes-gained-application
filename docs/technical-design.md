@@ -116,7 +116,7 @@ returns 0.
 | PGA Tour | `pga-tour` | Tables adapted from Broadie, _Every Shot Counts_ (default)                                               |
 | Scratch  | `scratch`  | `scaledBaseline(pgaTour, 0.06)`: `E' = E + 0.06·max(0, E − 1)`, ≈ 3 strokes/18 weaker on a par-72 course |
 
-The scaled form keeps tap-ins at 1 and holed balls at 0, preserves monotonicity, and is labelled
+The scaled form ([ADR 0008](adr/0008-scratch-baseline-estimate.md)) keeps tap-ins at 1 and holed balls at 0, preserves monotonicity, and is labelled
 "(est.)" in the UI until sourced tables replace it (PRD Q1). `getBaseline(id)` falls back to the
 default for unknown IDs so a stale preference can never break the app.
 
