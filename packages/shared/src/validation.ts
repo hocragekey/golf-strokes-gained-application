@@ -50,6 +50,11 @@ export function holeEntryIssues(hole: CourseHole, entry: HoleEntry): EntryIssue[
   if (entry.gir && entry.shortGameShots > 0) {
     add('gir', 'A green in regulation should not need short-game shots');
   }
+  // Holing out from off the green still counts as a GIR when it was in regulation.
+  const strokesToGreen = entry.score - Math.max(entry.putts, 1);
+  if (entry.gir && strokesToGreen > hole.par - 2) {
+    add('gir', `A green in regulation means reaching the green in ${hole.par - 2} strokes`);
+  }
   if (entry.gir && entry.missDirection !== null) {
     add('missDirection', 'Miss direction only applies when you missed the green');
   }

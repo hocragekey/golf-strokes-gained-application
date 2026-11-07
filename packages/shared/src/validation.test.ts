@@ -85,7 +85,14 @@ describe('holeEntryIssues', () => {
           missDirection: 'left',
         }),
       ),
-    ).toEqual(['gir', 'missDirection']);
+    ).toEqual(['gir', 'gir', 'missDirection']);
+  });
+
+  it('requires a GIR to reach the green in regulation', () => {
+    expect(paths(holeEntryIssues(par4, { ...validPar4, score: 5 }))).toEqual(['gir']);
+    expect(
+      holeEntryIssues(par4, { ...validPar4, score: 3, putts: 0, firstPuttFeet: null }),
+    ).toEqual([]);
   });
 
   it('rejects scores lower than the recorded shots allow', () => {
