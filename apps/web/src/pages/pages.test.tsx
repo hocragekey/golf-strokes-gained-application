@@ -229,6 +229,11 @@ describe('App shell', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Print' }));
     expect(print).toHaveBeenCalled();
     expect(screen.getByText('1st putt')).toBeInTheDocument();
+    expect(screen.getByText('5 R 165r Sh 1@15s 1@4')).toBeInTheDocument();
+    expect(
+      screen.getByRole('img', { name: 'QR code linking to the card guide' }),
+    ).toBeInTheDocument();
+    expect(screen.getAllByRole('row')).toHaveLength(7 + 1 + 3 + 18 + 1);
   });
 
   it('shows not found and the offline badge', async () => {
