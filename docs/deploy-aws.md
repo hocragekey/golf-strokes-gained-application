@@ -10,7 +10,7 @@ environments:
 | `prod`      | `golf-sg-web-prod` | a release-please release (after `dev` succeeds) | required reviewer in GitHub |
 
 ```
-GitHub Actions ──OIDC──▶ golf-sg-deploy-<env> role ──passes──▶ golf-sg-cfn-execution role
+GitHub Actions ──OIDC──▶ golf-sg-deploy-<env> role ──passes──▶ golf-sg-cfn-execution-<env> role
       │                         │                                   │
       │ s3 sync / invalidate    │ CloudFormation change set         ▼
       ▼                         ▼                          S3 (private) ◀─OAC─ CloudFront ◀── users
@@ -18,8 +18,8 @@ GitHub Actions ──OIDC──▶ golf-sg-deploy-<env> role ──passes──�
 
 - `infra/cloudformation/bootstrap.yml`: deployed **once per account** by an admin. It creates
   the GitHub OIDC provider, one deploy role per environment (trusted only for
-  `repo:hocragekey/golf-strokes-gained-application:environment:<env>`), and the CloudFormation
-  execution role. No AWS keys are ever stored in GitHub.
+  `repo:hocragekey/golf-strokes-gained-application:environment:<env>`), and a CloudFormation execution role per
+  environment, so a `dev` change set can never modify `prod` resources. No AWS keys are ever stored in GitHub.
 - `infra/cloudformation/web.yml`: one stack per environment, deployed by CI. It contains:
   - a private, encrypted, versioned S3 bucket that only accepts TLS
   - CloudFront with origin access control, HTTP/2 + HTTP/3, and redirect to HTTPS
@@ -55,14 +55,15 @@ region is simplest.
    gh api -X PUT repos/$repo/environments/prod
    gh variable set AWS_DEPLOY_ROLE_ARN        --repo $repo --env dev  --body <DevDeployRoleArn>
    gh variable set AWS_DEPLOY_ROLE_ARN        --repo $repo --env prod --body <ProdDeployRoleArn>
-   gh variable set AWS_CFN_EXECUTION_ROLE_ARN --repo $repo --env dev  --body <CfnExecutionRoleArn>
-   gh variable set AWS_CFN_EXECUTION_ROLE_ARN --repo $repo --env prod --body <CfnExecutionRoleArn>
+   gh variable set AWS_CFN_EXECUTION_ROLE_ARN --repo $repo --env dev  --body <DevCfnExecutionRoleArn>
+   gh variable set AWS_CFN_EXECUTION_ROLE_ARN --repo $repo --env prod --body <ProdCfnExecutionRoleArn>
    gh variable set AWS_REGION                 --repo $repo --body us-east-1
    gh variable set AWS_DEPLOY_ENABLED         --repo $repo --body true
    ```
 
 3. **Protect `prod`.** In Settings → Environments → `prod`, add yourself as a required
-   reviewer and restrict deployment branches to `main`.
+   reviewer and restrict deployment branches to `main`. Restrict `dev` to `main` as well:
+   the deploy role trusts any workflow run that targets the environment.
 
 4. **Ship.** Push to `main` (or run the Release workflow manually) and `dev` deploys. Merging a
    release-please PR deploys `prod` once you approve it. Each environment's URL appears on its

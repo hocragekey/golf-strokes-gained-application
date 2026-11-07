@@ -17,11 +17,11 @@ API container is not needed until cloud sync exists.
   and service worker.
 - Manage the infrastructure with **CloudFormation** in `infra/cloudformation`:
   - `bootstrap.yml`: an admin applies it once per account. It holds the OIDC provider, a
-    per-environment deploy role, and the CloudFormation execution role.
+    per-environment deploy role, and a per-environment CloudFormation execution role.
   - `web.yml`: CI deploys it, one stack per environment.
 - **Authentication:** GitHub Actions authenticates with **OIDC**. Each role trusts only its own
   GitHub environment's `sub` claim. The deploy roles can only create change sets for their own
-  stack, pass the execution role, upload to their own bucket, and invalidate CloudFront.
+  stack, pass their own execution role, upload to their own bucket, and invalidate CloudFront.
 - **Promotion:** `dev` deploys on every push to `main`. `prod` deploys on a release-please
   release, after `dev` succeeds, gated by a required reviewer on the `prod` GitHub environment.
 - **Linting:** CI runs `cfn-lint` and `checkov`. Accepted deviations (no WAF, no access logs,
