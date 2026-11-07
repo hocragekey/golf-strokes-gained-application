@@ -89,7 +89,7 @@ export const roundSchema = z.object({
   courseId: id,
   playedOn: isoDate,
   notes: z.string(),
-  holes: z.array(holeEntrySchema),
+  holes: z.array(holeEntrySchema).min(1).max(18),
   createdAt: timestamp,
   updatedAt: timestamp,
 });

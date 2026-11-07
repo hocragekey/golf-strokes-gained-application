@@ -85,11 +85,14 @@ export class LocalStore {
       }
       const existing = await this.getCourse(id);
       const rounds = await this.db.rounds.where('courseId').equals(id).toArray();
-      const maxHole = Math.max(0, ...rounds.map((r) => r.holes.length));
-      if (data.holes.length < maxHole) {
-        throw new StoreError(`Rounds on this course record ${maxHole} holes`);
-      }
       const course: Course = { ...existing, ...data, updatedAt: now() };
+      const broken = rounds.find((r) => roundIssues(r.holes, course).length > 0);
+      if (broken) {
+        throw new StoreError(
+          `This change conflicts with the round played ${broken.playedOn}; edit or delete it first`,
+          roundIssues(broken.holes, course),
+        );
+      }
       await this.db.courses.put(course);
       return course;
     });
@@ -136,20 +139,23 @@ export class LocalStore {
 
   async saveRound(input: RoundInput, id?: string): Promise<RoundDetail> {
     const data = parse(roundInputSchema, input);
-    const course = await this.getCourse(data.courseId);
-    const issues = roundIssues(data.holes, course);
-    if (issues.length > 0) throw new StoreError('Scorecard has errors', issues);
+    const roundId = await this.db.transaction('rw', this.db.courses, this.db.rounds, async () => {
+      const course = await this.getCourse(data.courseId);
+      const issues = roundIssues(data.holes, course);
+      if (issues.length > 0) throw new StoreError('Scorecard has errors', issues);
 
-    const existing = id === undefined ? undefined : await this.db.rounds.get(id);
-    if (id !== undefined && !existing) throw new StoreError('Round not found');
-    const round: Round = {
-      id: existing?.id ?? crypto.randomUUID(),
-      ...data,
-      createdAt: existing?.createdAt ?? now(),
-      updatedAt: now(),
-    };
-    await this.db.rounds.put(round);
-    return this.getRound(round.id);
+      const existing = id === undefined ? undefined : await this.db.rounds.get(id);
+      if (id !== undefined && !existing) throw new StoreError('Round not found');
+      const round: Round = {
+        id: existing?.id ?? crypto.randomUUID(),
+        ...data,
+        createdAt: existing?.createdAt ?? now(),
+        updatedAt: now(),
+      };
+      await this.db.rounds.put(round);
+      return round.id;
+    });
+    return this.getRound(roundId);
   }
 
   async deleteRound(id: string): Promise<void> {

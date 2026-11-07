@@ -38,6 +38,10 @@ describe('LocalStore', () => {
     await expect(
       store.saveCourse({ ...courseInput, holes: courseInput.holes.slice(0, 1) }, course.id),
     ).rejects.toThrow();
+    const par3First = courseInput.holes.map((h) => (h.number === 1 ? { ...h, par: 3 } : h));
+    await expect(store.saveCourse({ ...courseInput, holes: par3First }, course.id)).rejects.toThrow(
+      'conflicts with the round played 2026-05-01',
+    );
     await store.deleteRound(detail.round.id);
     await store.deleteCourse(course.id);
     expect(await store.listCourses()).toEqual([]);
@@ -94,6 +98,9 @@ describe('LocalStore', () => {
     const firstHole = broken.rounds[0]?.holes[0];
     if (firstHole) firstHole.firstPuttFeet = null;
     await expect(store.importBackup(broken)).rejects.toThrow('is invalid');
+    const empty = structuredClone(backup);
+    if (empty.rounds[0]) empty.rounds[0].holes = [];
+    await expect(store.importBackup(empty)).rejects.toBeInstanceOf(StoreError);
     expect(await store.listRounds()).toHaveLength(1);
   });
 });
