@@ -162,7 +162,9 @@ Resources:
               - cloudformation:DescribeStacks
               - cloudformation:DescribeStackEvents
               - cloudformation:GetTemplateSummary
-            Resource: !Sub arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/${AppName}-web-dev/*
+            Resource:
+              - !Sub arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/${AppName}-web-dev/*
+              - !Sub arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:changeSet/*
           - Sid: TemplateValidation
             Effect: Allow
             Action: cloudformation:ValidateTemplate
@@ -208,7 +210,9 @@ Resources:
               - cloudformation:DescribeStacks
               - cloudformation:DescribeStackEvents
               - cloudformation:GetTemplateSummary
-            Resource: !Sub arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/${AppName}-web-prod/*
+            Resource:
+              - !Sub arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/${AppName}-web-prod/*
+              - !Sub arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:changeSet/*
           - Sid: TemplateValidation
             Effect: Allow
             Action: cloudformation:ValidateTemplate
