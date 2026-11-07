@@ -104,5 +104,6 @@ describe('getBaseline', () => {
     expect(getBaseline('scratch')).toBe(scratchBaseline);
     expect(getBaseline('nope')).toBe(DEFAULT_BASELINE);
     expect(getBaseline(undefined)).toBe(DEFAULT_BASELINE);
+    expect(getBaseline('toString')).toBe(DEFAULT_BASELINE);
   });
 });

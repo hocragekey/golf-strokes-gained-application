@@ -6,7 +6,7 @@ const CHANGE_EVENT = 'golf-sg:preferences';
 
 function readBaselineId(): string {
   const stored = localStorage.getItem(BASELINE_KEY);
-  return stored !== null && stored in BASELINES ? stored : DEFAULT_BASELINE.id;
+  return stored !== null && Object.hasOwn(BASELINES, stored) ? stored : DEFAULT_BASELINE.id;
 }
 
 function subscribe(onChange: () => void): () => void {

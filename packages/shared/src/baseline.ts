@@ -259,5 +259,7 @@ export const DEFAULT_BASELINE = pgaTourBaseline;
 
 /** Looks up a baseline by id, falling back to the default for unknown or missing ids. */
 export function getBaseline(id: string | undefined): Baseline {
-  return (id === undefined ? undefined : BASELINES[id]) ?? DEFAULT_BASELINE;
+  return id !== undefined && Object.hasOwn(BASELINES, id)
+    ? (BASELINES[id] ?? DEFAULT_BASELINE)
+    : DEFAULT_BASELINE;
 }
