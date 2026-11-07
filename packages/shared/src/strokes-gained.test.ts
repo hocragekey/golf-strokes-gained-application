@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { pgaTourBaseline } from './baseline.js';
+import { pgaTourBaseline, scratchBaseline } from './baseline.js';
 import { holeEntrySchema, type HoleEntry } from './schemas.js';
 import { holeStrokesGained, roundStrokesGained, sumCategories } from './strokes-gained.js';
 import { entry, par3, par4, par5 } from './test/fixtures.js';
@@ -80,41 +80,44 @@ describe('holeStrokesGained', () => {
     expect(sg.putting).toBe(0);
   });
 
-  it('always sums categories to E(tee) - score for valid entries', () => {
-    let seed = 42;
-    const rand = (n: number) => {
-      seed = (seed * 1_103_515_245 + 12_345) % 2 ** 31;
-      return seed % n;
-    };
-    let checked = 0;
-    for (let i = 0; i < 2000; i++) {
-      const hole = [par3, par4, par5][rand(3)] ?? par4;
-      const shortGameShots = rand(3);
-      const putts = rand(4);
-      const candidate: HoleEntry = holeEntrySchema.parse({
-        holeNumber: hole.number,
-        score: 1 + rand(9),
-        teeResult:
-          hole.par === 3 ? null : (['fairway', 'left', 'right', 'penalty'] as const)[rand(4)],
-        approachYards: hole.par === 3 ? null : 20 + rand(hole.yardage - 20),
-        approachLie:
-          hole.par === 3 ? 'tee' : (['fairway', 'rough', 'sand', 'recovery'] as const)[rand(4)],
-        gir: shortGameShots === 0 && rand(2) === 0,
-        shortGameShots,
-        shortGameYards: shortGameShots > 0 ? 1 + rand(50) : null,
-        shortGameLie: shortGameShots > 0 ? (['fringe', 'rough', 'sand'] as const)[rand(3)] : null,
-        firstPuttFeet: putts > 0 ? 1 + rand(80) : null,
-        putts,
-        penalties: rand(2),
-      });
-      if (holeEntryIssues(hole, candidate).length > 0) continue;
-      const sg = holeStrokesGained(hole, candidate);
-      const sum = sg.offTheTee + sg.approach + sg.aroundTheGreen + sg.putting;
-      expect(sum).toBeCloseTo(E(hole.yardage, 'tee') - candidate.score, 1);
-      checked++;
-    }
-    expect(checked).toBeGreaterThan(100);
-  });
+  it.each([pgaTourBaseline, scratchBaseline])(
+    'always sums categories to E(tee) - score for valid entries ($name)',
+    (baseline) => {
+      let seed = 42;
+      const rand = (n: number) => {
+        seed = (seed * 1_103_515_245 + 12_345) % 2 ** 31;
+        return seed % n;
+      };
+      let checked = 0;
+      for (let i = 0; i < 2000; i++) {
+        const hole = [par3, par4, par5][rand(3)] ?? par4;
+        const shortGameShots = rand(3);
+        const putts = rand(4);
+        const candidate: HoleEntry = holeEntrySchema.parse({
+          holeNumber: hole.number,
+          score: 1 + rand(9),
+          teeResult:
+            hole.par === 3 ? null : (['fairway', 'left', 'right', 'penalty'] as const)[rand(4)],
+          approachYards: hole.par === 3 ? null : 20 + rand(hole.yardage - 20),
+          approachLie:
+            hole.par === 3 ? 'tee' : (['fairway', 'rough', 'sand', 'recovery'] as const)[rand(4)],
+          gir: shortGameShots === 0 && rand(2) === 0,
+          shortGameShots,
+          shortGameYards: shortGameShots > 0 ? 1 + rand(50) : null,
+          shortGameLie: shortGameShots > 0 ? (['fringe', 'rough', 'sand'] as const)[rand(3)] : null,
+          firstPuttFeet: putts > 0 ? 1 + rand(80) : null,
+          putts,
+          penalties: rand(2),
+        });
+        if (holeEntryIssues(hole, candidate).length > 0) continue;
+        const sg = holeStrokesGained(hole, candidate, baseline);
+        const sum = sg.offTheTee + sg.approach + sg.aroundTheGreen + sg.putting;
+        expect(sum).toBeCloseTo(baseline.expectedStrokes(hole.yardage, 'tee') - candidate.score, 1);
+        checked++;
+      }
+      expect(checked).toBeGreaterThan(100);
+    },
+  );
 });
 
 describe('roundStrokesGained', () => {
