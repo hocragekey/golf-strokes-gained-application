@@ -229,7 +229,35 @@ export const pgaTourBaseline: Baseline = {
   },
 };
 
+/**
+ * Derives a weaker baseline from another by scaling the strokes beyond the final one:
+ * E'(d) = E(d) + factor * (E(d) - 1). Tap-ins (E = 1) and holed balls (E = 0) are unchanged.
+ */
+export function scaledBaseline(base: Baseline, id: string, name: string, factor: number): Baseline {
+  return {
+    id,
+    name,
+    expectedStrokes: (distance, lie) => {
+      const e = base.expectedStrokes(distance, lie);
+      return e === 0 ? 0 : e + factor * Math.max(0, e - 1);
+    },
+  };
+}
+
+/**
+ * Estimated scratch-golfer baseline: about 3 strokes per 18 holes weaker than the Tour on a
+ * typical par-72 course. An approximation until published scratch tables are sourced (see
+ * docs/prd.md, open questions).
+ */
+export const scratchBaseline = scaledBaseline(pgaTourBaseline, 'scratch', 'Scratch (est.)', 0.06);
+
 export const BASELINES: Readonly<Record<string, Baseline>> = {
   [pgaTourBaseline.id]: pgaTourBaseline,
+  [scratchBaseline.id]: scratchBaseline,
 };
 export const DEFAULT_BASELINE = pgaTourBaseline;
+
+/** Looks up a baseline by id, falling back to the default for unknown or missing ids. */
+export function getBaseline(id: string | undefined): Baseline {
+  return (id === undefined ? undefined : BASELINES[id]) ?? DEFAULT_BASELINE;
+}

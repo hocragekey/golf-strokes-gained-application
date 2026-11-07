@@ -1,5 +1,6 @@
 import { Link, useNavigate, useParams } from 'react-router';
 import { useDeleteRound, useRound } from '../data/hooks';
+import { BaselineSelect } from '../components/BaselineSelect';
 import { SgBars, SgValue } from '../components/Sg';
 import { formatToPar } from '../format';
 
@@ -46,7 +47,10 @@ export function RoundDetail() {
         </div>
       </div>
       <section className="card">
-        <h3>Strokes gained</h3>
+        <div className="card-header">
+          <h3>Strokes gained</h3>
+          <BaselineSelect />
+        </div>
         <SgBars sg={summary.sg} />
       </section>
       <section className="card">

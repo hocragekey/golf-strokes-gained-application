@@ -1,5 +1,6 @@
 import {
   computeStats,
+  getBaseline,
   courseInputSchema,
   courseSchema,
   roundInputSchema,
@@ -122,18 +123,19 @@ export class LocalStore {
       });
   }
 
-  async listRounds(): Promise<RoundSummary[]> {
+  async listRounds(baselineId?: string): Promise<RoundSummary[]> {
+    const baseline = getBaseline(baselineId);
     return (await this.withCourses()).map((rc) => {
-      const { holeSg: _holeSg, ...summary } = summarizeRound(rc);
+      const { holeSg: _holeSg, ...summary } = summarizeRound(rc, baseline);
       return summary;
     });
   }
 
-  async getRound(id: string): Promise<RoundDetail> {
+  async getRound(id: string, baselineId?: string): Promise<RoundDetail> {
     const round = await this.db.rounds.get(id);
     if (!round) throw new StoreError('Round not found');
     const course = await this.getCourse(round.courseId);
-    const { holeSg, ...summary } = summarizeRound({ round, course });
+    const { holeSg, ...summary } = summarizeRound({ round, course }, getBaseline(baselineId));
     return { round, course, summary, holes: holeSg };
   }
 
@@ -162,8 +164,8 @@ export class LocalStore {
     await this.db.rounds.delete(id);
   }
 
-  async getStats(limit?: number): Promise<Stats> {
-    return computeStats(await this.withCourses(limit));
+  async getStats(limit?: number, baselineId?: string): Promise<Stats> {
+    return computeStats(await this.withCourses(limit), getBaseline(baselineId));
   }
 
   async exportBackup(): Promise<Backup> {

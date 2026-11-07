@@ -44,6 +44,16 @@ describe('Dashboard', () => {
     expect(screen.getByLabelText('Range')).toHaveValue('0');
   });
 
+  it('switches the comparison baseline', async () => {
+    const { store } = await seeded();
+    renderWithProviders(<Dashboard />, { store });
+    expect(await screen.findByText(/vs PGA Tour baseline/)).toBeInTheDocument();
+    await userEvent.selectOptions(screen.getByLabelText('Compare against'), 'scratch');
+    expect(await screen.findByText(/vs Scratch \(est\.\) baseline/)).toBeInTheDocument();
+    expect(localStorage.getItem('golf-sg.baseline')).toBe('scratch');
+    localStorage.clear();
+  });
+
   it('shows errors', async () => {
     const store = createTestStore();
     vi.spyOn(store, 'getStats').mockRejectedValue(new Error('storage unavailable'));
