@@ -5,7 +5,8 @@ coverage/
 .env
 .env.*
 !.env.example
-data/
+/data/
+apps/api/data/
 *.db
 *.db-journal
 *.db-wal
