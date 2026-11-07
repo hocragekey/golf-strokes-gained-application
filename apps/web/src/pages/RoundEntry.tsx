@@ -26,7 +26,10 @@ const LABELS: Record<string, string> = {
 };
 
 const label = (value: string): string => LABELS[value] ?? value;
-const today = (): string => new Date().toISOString().slice(0, 10);
+const today = (): string => {
+  const d = new Date();
+  return `${String(d.getFullYear())}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
 
 function Options({ values, blank }: { values: readonly string[]; blank?: string }) {
   return (
