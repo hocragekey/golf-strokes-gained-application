@@ -16,7 +16,7 @@ cloud credentials.
 - Conventional Commits and release-please for SemVer and changelogs.
 - Release artifacts: a signed multi-arch GHCR image (SBOM, SLSA provenance, cosign keyless via
   OIDC) for self-hosting, and the static PWA deployed to GitHub Pages behind the `github-pages`
-  environment.
+  environment (superseded by [ADR 0007](0007-aws-static-hosting.md): AWS S3 + CloudFront).
 - Dependabot for npm, Actions and Docker with a 7-day cooldown; CodeQL, dependency review,
   gitleaks, actionlint and zizmor as security gates.
 

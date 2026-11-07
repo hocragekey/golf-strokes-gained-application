@@ -49,6 +49,7 @@ docker compose up --build   # http://localhost:3000
 | `packages/shared` | Pure TS domain: Zod schemas, expected-strokes baselines, SG engine, insights    |
 | `apps/web`        | React + Vite PWA; IndexedDB (Dexie) store; service worker via Workbox           |
 | `apps/api`        | Fastify server: serves the PWA, health checks, and the future sync API (SQLite) |
+| `infra`           | CloudFormation for AWS hosting (dev/prod)                                       |
 | `e2e`             | Playwright tests against the production build, including offline mode           |
 | `docs/adr`        | Architecture decision records                                                   |
 
@@ -66,6 +67,7 @@ pnpm test:e2e       # Playwright (run `pnpm build` first)
 ## Documentation
 
 - [Engineering standards](docs/engineering-standards.md): branching, commits, CI/CD, releases
+- [Deploying to AWS](docs/deploy-aws.md): S3 + CloudFront, dev and prod environments
 - [Contributing](CONTRIBUTING.md) · [Security policy](SECURITY.md)
 - [ADRs](docs/adr), especially [local-first PWA](docs/adr/0003-local-first-pwa.md),
   [strokes-gained model](docs/adr/0004-strokes-gained-model.md) and
