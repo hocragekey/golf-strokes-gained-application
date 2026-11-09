@@ -8,14 +8,15 @@ on:
 permissions:
   contents: read
 
-concurrency:
-  group: release
-  cancel-in-progress: false
-
+# Concurrency is per job, not per workflow: a prod deploy waiting for approval must not hold up
+# release-please or dev deploys from later pushes. deploy-web.yml serializes each environment.
 jobs:
   release-please:
     name: Release PR / tag
     runs-on: ubuntu-latest
+    concurrency:
+      group: release-please
+      cancel-in-progress: false
     permissions:
       contents: write
       pull-requests: write
