@@ -17,9 +17,8 @@ GitHub Actions ──OIDC──▶ golf-sg-deploy-<env> role ──passes──�
 ```
 
 - `infra/cloudformation/bootstrap.yml`: deployed **once per account** by an admin. It creates
-  the GitHub OIDC provider, one deploy role per environment (trusted only for
-  `repo:hocragekey/golf-strokes-gained-application:environment:<env>`), and a CloudFormation execution role per
-  environment, so a `dev` change set can never modify `prod` resources. No AWS keys are ever stored in GitHub.
+  the GitHub OIDC provider, one deploy role per environment (trusted only for this repo's
+  `<env>` GitHub environment), and a CloudFormation execution role per environment, so a `dev` change set can never modify `prod` resources. No AWS keys are ever stored in GitHub.
 - `infra/cloudformation/web.yml`: one stack per environment, deployed by CI. It contains:
   - a private, encrypted, versioned S3 bucket that only accepts TLS
   - CloudFront with origin access control, HTTP/2 + HTTP/3, and redirect to HTTPS
@@ -43,9 +42,18 @@ region is simplest.
      --template-file infra/cloudformation/bootstrap.yml \
      --capabilities CAPABILITY_NAMED_IAM
      # add: --parameter-overrides ExistingOidcProviderArn=arn:aws:iam::<acct>:oidc-provider/token.actions.githubusercontent.com
+     # for a fork or another repo, also override GitHubOwner, GitHubRepo, GitHubOwnerId, GitHubRepoId
    aws cloudformation describe-stacks --region us-east-1 --stack-name golf-sg-bootstrap \
      --query 'Stacks[0].Outputs' --output table
    ```
+
+   The roles trust the OIDC `sub` claim exactly. This repo uses GitHub's immutable subject
+   (`repo:hocragekey@2671490/golf-strokes-gained-application@1449035641:environment:<env>`), so the
+   template defaults `GitHubOwnerId`/`GitHubRepoId` to those IDs. Check what a repo uses with
+   `gh api repos/<owner>/<repo>/actions/oidc/customization/sub`: if `use_immutable_subject` is
+   true, pass the IDs from `gh api repos/<owner>/<repo> --jq '.owner.id, .id'`; otherwise pass
+   both as empty strings for the classic `repo:<owner>/<repo>` subject. A mismatch fails deploys
+   with `Not authorized to perform sts:AssumeRoleWithWebIdentity`.
 
 2. **Create the GitHub environments and variables.** Use the outputs from step 1.
 

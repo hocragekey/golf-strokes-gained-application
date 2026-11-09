@@ -10,6 +10,18 @@ Parameters:
   GitHubRepo:
     Type: String
     Default: golf-strokes-gained-application
+  GitHubOwnerId:
+    Type: String
+    Default: '2671490'
+    AllowedPattern: '^[0-9]*$'
+    Description: >-
+      Numeric owner ID, for repos whose OIDC tokens use GitHub's immutable subject
+      (repo:owner@id/repo@id). Leave both IDs blank for the classic repo:owner/repo subject.
+  GitHubRepoId:
+    Type: String
+    Default: '1449035641'
+    AllowedPattern: '^[0-9]*$'
+    Description: Numeric repository ID (see GitHubOwnerId).
   AppName:
     Type: String
     Default: golf-sg
@@ -23,6 +35,8 @@ Parameters:
 
 Conditions:
   CreateOidcProvider: !Equals [!Ref ExistingOidcProviderArn, '']
+  UseImmutableSubject:
+    !Not [!Or [!Equals [!Ref GitHubOwnerId, ''], !Equals [!Ref GitHubRepoId, '']]]
 
 Resources:
   GitHubOidcProvider:
@@ -154,12 +168,16 @@ Resources:
               "Condition": {
                 "StringEquals": {
                   "token.actions.githubusercontent.com:aud": "sts.amazonaws.com",
-                  "token.actions.githubusercontent.com:sub": "repo:${GitHubOwner}/${GitHubRepo}:environment:dev"
+                  "token.actions.githubusercontent.com:sub": "${Subject}:environment:dev"
                 }
               }
             }]
           }
         - Provider: !If [CreateOidcProvider, !Ref GitHubOidcProvider, !Ref ExistingOidcProviderArn]
+          Subject: !If
+            - UseImmutableSubject
+            - !Sub repo:${GitHubOwner}@${GitHubOwnerId}/${GitHubRepo}@${GitHubRepoId}
+            - !Sub repo:${GitHubOwner}/${GitHubRepo}
       ManagedPolicyArns:
         - !Ref DevDeployPolicy
 
@@ -179,12 +197,16 @@ Resources:
               "Condition": {
                 "StringEquals": {
                   "token.actions.githubusercontent.com:aud": "sts.amazonaws.com",
-                  "token.actions.githubusercontent.com:sub": "repo:${GitHubOwner}/${GitHubRepo}:environment:prod"
+                  "token.actions.githubusercontent.com:sub": "${Subject}:environment:prod"
                 }
               }
             }]
           }
         - Provider: !If [CreateOidcProvider, !Ref GitHubOidcProvider, !Ref ExistingOidcProviderArn]
+          Subject: !If
+            - UseImmutableSubject
+            - !Sub repo:${GitHubOwner}@${GitHubOwnerId}/${GitHubRepo}@${GitHubRepoId}
+            - !Sub repo:${GitHubOwner}/${GitHubRepo}
       ManagedPolicyArns:
         - !Ref ProdDeployPolicy
 
