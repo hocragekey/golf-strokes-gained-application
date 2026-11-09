@@ -26,8 +26,3 @@ pnpm lint && pnpm typecheck && pnpm test:coverage && pnpm build && pnpm test:e2e
 - Changes to strokes-gained math need unit tests that check the category-sum invariant and,
   for model changes, an ADR.
 - Coverage thresholds are enforced in CI (`vitest.config.ts`); don't lower them to pass.
-
-## Database changes (sync API)
-
-Edit `apps/api/src/db/schema.ts`, then `pnpm db:generate` and commit the generated migration.
-Never edit an applied migration.
