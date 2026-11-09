@@ -8,3 +8,8 @@ allowBuilds:
 minimumReleaseAgeExclude:
   - '@tanstack/query-core@5.107.1'
   - '@tanstack/react-query@5.107.1'
+
+overrides:
+  # GHSA-3g3m-2fjr-6pw4 (glob) and minimatch globparts DoS; transitive via workbox-build and typescript-eslint.
+  'glob@>=9.0.0 <14.0.2': ^14.0.2
+  'minimatch@>=7.0.0 <11.0.1': ^11.0.1
