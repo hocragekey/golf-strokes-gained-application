@@ -4,7 +4,7 @@
 | ------- | ------------------------------------------------------------------------------------ |
 | Status  | v1 implemented (Phase 1); Phases 2–5 proposed                                        |
 | Owner   | @hocragekey                                                                          |
-| Version | 1.1, revised after the first PRD ↔ implementation cycle (see §11)                    |
+| Version | 1.2, revised after the first PRD ↔ implementation cycle and owner review (see §11)   |
 | Related | [Technical design](technical-design.md) · [ADRs](adr) · [AWS runbook](deploy-aws.md) |
 
 This PRD is the source of truth for **what** the product does and **why**. The
@@ -222,17 +222,18 @@ Principles:
 
 ## 10. Open questions
 
-| #   | Question                                                                                        | Owner   |
-| --- | ----------------------------------------------------------------------------------------------- | ------- |
-| Q1  | Source for handicap-matched and scratch expected-strokes tables (licensing, accuracy).          | Product |
-| Q2  | Should the unauthenticated Fastify course/round endpoints be disabled or removed until Phase 2? | Eng     |
-| Q3  | Identity provider choice for Phase 2 (Cognito vs Auth0 vs Clerk): cost, passkeys, native SDKs.  | Eng     |
-| Q4  | Expo vs fully native Swift/Kotlin for Phase 3, given watch support needs.                       | Eng     |
-| Q5  | Is a custom domain needed before sharing with the buddy group?                                  | Product |
+| #   | Question                                                                                                                                                                   | Owner   |
+| --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- |
+| Q1  | Source for handicap-matched and scratch expected-strokes tables (licensing, accuracy).                                                                                     | Product |
+| Q2  | ~~Should the unauthenticated Fastify course/round endpoints be disabled or removed until Phase 2?~~ Resolved in 1.2: removed; authenticated sync replaces them in Phase 2. | Eng     |
+| Q3  | Identity provider choice for Phase 2 (Cognito vs Auth0 vs Clerk): cost, passkeys, native SDKs.                                                                             | Eng     |
+| Q4  | Expo vs fully native Swift/Kotlin for Phase 3, given watch support needs.                                                                                                  | Eng     |
+| Q5  | Is a custom domain needed before sharing with the buddy group?                                                                                                             | Product |
 
 ## 11. Revision history
 
-| Version | Change                                                                                                                                                                                                                                        |
-| ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1.0     | Reverse-engineered from the implemented v1 (PR #1, PR #2).                                                                                                                                                                                    |
-| 1.1     | Cycle 1 gap analysis closed three gaps: FR-SG-07 (baseline selector, promised in early design but missing), FR-CARD-01..04 (card guide reworked to be scorecard-agnostic, pocket sheet with QR code), NFR-OPS-01 (one-command AWS bootstrap). |
+| Version | Change                                                                                                                                                                                                                                                                           |
+| ------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1.0     | Reverse-engineered from the implemented v1 (PR #1, PR #2).                                                                                                                                                                                                                       |
+| 1.1     | Cycle 1 gap analysis closed three gaps: FR-SG-07 (baseline selector, promised in early design but missing), FR-CARD-01..04 (card guide reworked to be scorecard-agnostic, pocket sheet with QR code), NFR-OPS-01 (one-command AWS bootstrap).                                    |
+| 1.2     | Resolved Q2 (owner review): the unauthenticated course/round/stats API endpoints and the server-side SQLite store were removed. The API is now a stateless static host with health checks; server-side data returns only with Phase 2 authenticated, per-user sync (NFR-SEC-03). |
