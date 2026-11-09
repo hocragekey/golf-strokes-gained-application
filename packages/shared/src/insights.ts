@@ -2,7 +2,6 @@ import { DEFAULT_BASELINE, type Baseline } from './baseline.js';
 import type {
   BucketStat,
   CategoryKey,
-  Course,
   HoleSg,
   MissDirection,
   PracticePriority,
@@ -12,11 +11,6 @@ import type {
   Stats,
 } from './schemas.js';
 import { emptyCategories, round2, roundStrokesGained, sumCategories } from './strokes-gained.js';
-
-export interface RoundWithCourse {
-  round: Round;
-  course: Course;
-}
 
 export const CATEGORY_LABELS: Record<CategoryKey, string> = {
   offTheTee: 'Off the tee',
@@ -45,16 +39,15 @@ const MIN_SAMPLE = 3;
 const pct = (n: number, d: number): number | null => (d === 0 ? null : round2((n / d) * 100));
 
 export function summarizeRound(
-  { round, course }: RoundWithCourse,
+  round: Round,
   baseline: Baseline = DEFAULT_BASELINE,
 ): RoundSummary & { holeSg: HoleSg[] } {
-  const { holes, total } = roundStrokesGained(course.holes, round.holes, baseline);
+  const { holes, total } = roundStrokesGained(round.layout, round.holes, baseline);
   const score = round.holes.reduce((a, h) => a + h.score, 0);
   const par = holes.reduce((a, h) => a + h.par, 0);
   return {
     id: round.id,
-    courseId: course.id,
-    courseName: course.name,
+    courseName: round.courseName,
     playedOn: round.playedOn,
     holesPlayed: round.holes.length,
     score,
@@ -88,9 +81,8 @@ function bandFor<T extends { max: number }>(bands: readonly T[], value: number):
   return bands.find((b) => value <= b.max) ?? last;
 }
 
-const chronological = (a: RoundWithCourse, b: RoundWithCourse): number =>
-  a.round.playedOn.localeCompare(b.round.playedOn) ||
-  a.round.createdAt.localeCompare(b.round.createdAt);
+const chronological = (a: Round, b: Round): number =>
+  a.playedOn.localeCompare(b.playedOn) || a.createdAt.localeCompare(b.createdAt);
 
 function worst(buckets: readonly BucketStat[]): BucketStat | undefined {
   return [...buckets]
@@ -100,7 +92,7 @@ function worst(buckets: readonly BucketStat[]): BucketStat | undefined {
 
 /** Aggregates rounds into per-18-hole strokes gained, traditional stats and practice priorities. */
 export function computeStats(
-  rounds: readonly RoundWithCourse[],
+  rounds: readonly Round[],
   baseline: Baseline = DEFAULT_BASELINE,
 ): Stats {
   const ordered = [...rounds].sort(chronological);
@@ -122,11 +114,11 @@ export function computeStats(
   let upAndDownChances = 0;
   let upAndDowns = 0;
 
-  for (const [i, { round, course }] of ordered.entries()) {
+  for (const [i, round] of ordered.entries()) {
     const holeSg = summaries[i]?.holeSg ?? [];
     round.holes.forEach((entry, j) => {
       const sg = holeSg[j];
-      const hole = course.holes.find((h) => h.number === entry.holeNumber);
+      const hole = round.layout.find((h) => h.number === entry.holeNumber);
       if (!sg || !hole) return;
       strokes += entry.score;
       putts += entry.putts;

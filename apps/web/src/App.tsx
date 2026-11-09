@@ -17,15 +17,16 @@ export function App() {
           <img src={`${import.meta.env.BASE_URL}favicon.svg`} alt="" width={24} height={24} />
           Strokes Gained
         </NavLink>
-        <nav>
+        <nav aria-label="Main">
           <NavLink to="/" end>
-            Dashboard
+            Home
           </NavLink>
           <NavLink to="/rounds" end>
             Rounds
           </NavLink>
-          <NavLink to="/rounds/new">Enter round</NavLink>
-          <NavLink to="/courses">Courses</NavLink>
+          <NavLink to="/rounds/new" className="nav-cta">
+            New round
+          </NavLink>
           <NavLink to="/guide">Card guide</NavLink>
           <NavLink to="/backup">Backup</NavLink>
         </nav>

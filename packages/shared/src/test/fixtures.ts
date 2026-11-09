@@ -26,5 +26,15 @@ export const course: Course = {
 };
 
 export function round(id: string, playedOn: string, holes: HoleEntry[]): Round {
-  return { id, courseId: course.id, playedOn, notes: '', holes, createdAt: now, updatedAt: now };
+  return {
+    id,
+    courseName: course.name,
+    tees: course.tees,
+    playedOn,
+    notes: '',
+    layout: course.holes.slice(0, holes.length),
+    holes,
+    createdAt: now,
+    updatedAt: now,
+  };
 }

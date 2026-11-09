@@ -1,4 +1,5 @@
 import {
+  courseHoleSchema,
   holeEntryIssues,
   holeEntrySchema,
   type CourseHole,
@@ -103,10 +104,43 @@ export function validateRow(d: HoleDraft, hole: CourseHole): RowResult {
     : { errors: Object.fromEntries(issues.map((i) => [i.path, i.message])) };
 }
 
+/** Par and yardage for one hole as typed from the scorecard. */
+export interface LayoutDraft {
+  par: string;
+  yardage: string;
+}
+
+export const emptyLayout = (): LayoutDraft => ({ par: '4', yardage: '' });
+
+export const layoutFromHole = (hole: CourseHole): LayoutDraft => ({
+  par: String(hole.par),
+  yardage: String(hole.yardage),
+});
+
+/** Parses a hole's par and yardage; returns field errors when they aren't usable yet. */
+export function parseLayout(
+  draft: LayoutDraft,
+  number: number,
+): { hole?: CourseHole; errors: Record<string, string> } {
+  const parsed = courseHoleSchema.safeParse({
+    number,
+    par: Number(draft.par),
+    yardage: draft.yardage.trim() === '' ? Number.NaN : Number(draft.yardage),
+  });
+  if (parsed.success) return { hole: parsed.data, errors: {} };
+  const errors: Record<string, string> = {};
+  for (const issue of parsed.error.issues) {
+    const field = String(issue.path[0]);
+    errors[field] =
+      field === 'par' ? 'Pick the par from the card' : 'Enter the yardage from the card (50–800)';
+  }
+  return { errors };
+}
+
 /** Holes must be filled from hole 1 without gaps; trailing blank rows are ignored. */
 export function validateCard(
   drafts: readonly HoleDraft[],
-  holes: readonly CourseHole[],
+  holes: readonly (CourseHole | undefined)[],
 ): { entries: HoleEntry[]; rowErrors: Record<string, string>[]; error: string | null } {
   let lastFilled = -1;
   drafts.forEach((d, i) => {
@@ -117,13 +151,17 @@ export function validateCard(
   const entries: HoleEntry[] = [];
   const rowErrors = drafts.map((d, i) => {
     const hole = holes[i];
-    if (i > lastFilled || !hole) return {};
+    if (i > lastFilled) return {};
     if (isBlank(d)) return { score: 'Fill holes in order from hole 1' };
+    if (!hole) return { yardage: 'Enter the par and yardage from the card' };
     const result = validateRow(d, hole);
     if (result.entry) entries.push(result.entry);
     return result.errors;
   });
   const bad = rowErrors.filter((e) => Object.keys(e).length > 0).length;
+  if (bad === 0 && entries.length !== lastFilled + 1) {
+    return { entries, rowErrors, error: 'Enter the par and yardage for every played hole' };
+  }
   return {
     entries,
     rowErrors,

@@ -1,6 +1,15 @@
 import type { CourseHole } from '@golf-sg/shared';
 import { describe, expect, it } from 'vitest';
-import { draftFromEntry, emptyDraft, validateCard, validateRow, type HoleDraft } from './scorecard';
+import {
+  draftFromEntry,
+  emptyDraft,
+  emptyLayout,
+  layoutFromHole,
+  parseLayout,
+  validateCard,
+  validateRow,
+  type HoleDraft,
+} from './scorecard';
 
 const par4: CourseHole = { number: 1, par: 4, yardage: 400 };
 const par3: CourseHole = { number: 2, par: 3, yardage: 160 };
@@ -80,5 +89,27 @@ describe('validateCard', () => {
     const result = validateCard([emptyDraft(), good3], [par4, par3]);
     expect(result.error).toBe('1 hole need attention');
     expect(result.rowErrors[0]).toEqual({ score: 'Fill holes in order from hole 1' });
+  });
+});
+
+describe('parseLayout', () => {
+  it('parses par and yardage copied from the card', () => {
+    expect(parseLayout(layoutFromHole(par3), 2)).toEqual({ hole: par3, errors: {} });
+  });
+
+  it('asks for a missing or out-of-range yardage', () => {
+    expect(parseLayout(emptyLayout(), 1).errors).toHaveProperty('yardage');
+    expect(parseLayout({ par: '9', yardage: '30' }, 1).errors).toMatchObject({
+      par: expect.stringContaining('par') as string,
+      yardage: expect.stringContaining('50–800') as string,
+    });
+  });
+});
+
+describe('validateCard without a layout', () => {
+  it('asks for par and yardage on played holes that have none', () => {
+    const result = validateCard([good4], [undefined]);
+    expect(result.rowErrors[0]).toHaveProperty('yardage');
+    expect(result.error).toBe('1 hole need attention');
   });
 });

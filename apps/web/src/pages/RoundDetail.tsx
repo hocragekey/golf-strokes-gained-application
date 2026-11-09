@@ -1,6 +1,7 @@
 import { Link, useNavigate, useParams } from 'react-router';
 import { useDeleteRound, useRound } from '../data/hooks';
 import { BaselineSelect } from '../components/BaselineSelect';
+import { PracticeFirst, weakest } from '../components/Practice';
 import { SgBars, SgValue } from '../components/Sg';
 import { formatToPar } from '../format';
 
@@ -21,11 +22,18 @@ export function RoundDetail() {
   }
 
   const { summary, holes, round: r } = round.data;
+  const focus = weakest(
+    summary.sg,
+    r.layout.some((h) => h.par !== 3),
+  );
+  const byTotal = [...holes].sort((a, b) => b.total - a.total);
+  const best = byTotal[0];
+  const worst = byTotal.at(-1);
   return (
     <div className="stack">
       <div className="card-header">
         <div>
-          <h2>{summary.courseName}</h2>
+          <h2>{summary.courseName || `Round on ${summary.playedOn}`}</h2>
           <p className="muted">
             {summary.playedOn} · {summary.score} ({formatToPar(summary.toPar)}) ·{' '}
             {summary.holesPlayed} holes{r.notes && ` · ${r.notes}`}
@@ -46,13 +54,32 @@ export function RoundDetail() {
           </button>
         </div>
       </div>
-      <section className="card">
-        <div className="card-header">
-          <h3>Strokes gained</h3>
-          <BaselineSelect />
-        </div>
-        <SgBars sg={summary.sg} />
-      </section>
+      <div className="grid-2">
+        <section className="card">
+          <div className="card-header">
+            <h3>Strokes gained</h3>
+            <BaselineSelect />
+          </div>
+          <SgBars sg={summary.sg} />
+        </section>
+        <PracticeFirst category={focus} value={summary.sg[focus]} per="this round" />
+      </div>
+      {best && worst && holes.length > 1 && (
+        <dl className="stats highlights">
+          <div>
+            <dt>Best hole</dt>
+            <dd>
+              #{best.holeNumber} <SgValue value={best.total} />
+            </dd>
+          </div>
+          <div>
+            <dt>Toughest hole</dt>
+            <dd>
+              #{worst.holeNumber} <SgValue value={worst.total} />
+            </dd>
+          </div>
+        </dl>
+      )}
       <section className="card">
         <h3>By hole</h3>
         <div className="table-scroll">

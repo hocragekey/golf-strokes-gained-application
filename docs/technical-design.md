@@ -52,7 +52,9 @@ warnings), Prettier, Vitest, Playwright, Husky + lint-staged + commitlint. See
 All entities use client-generated UUIDs and ISO-8601 timestamps so that multiple devices can create
 data offline and later sync without ID collisions (Phase 2).
 
-### Course (FR-COURSE-01)
+### Saved course (FR-COURSE-01..03)
+
+An optional shortcut that pre-fills par and yardage; rounds never reference it (ADR 0010).
 
 | Field                    | Type                       | Rules                                                   |
 | ------------------------ | -------------------------- | ------------------------------------------------------- |
@@ -64,33 +66,43 @@ data offline and later sync without ID collisions (Phase 2).
 
 ### Round and HoleEntry (FR-ENTRY-01, FR-ENTRY-02)
 
-| Field                  | Type / domain                                          | Notes                                        |
-| ---------------------- | ------------------------------------------------------ | -------------------------------------------- |
-| `round.id`, `courseId` | UUID                                                   |                                              |
-| `playedOn`             | ISO date                                               | defaults to today in local time              |
-| `notes`                | string ≤ 1000                                          |                                              |
-| `holes[]`              | 1–18 `HoleEntry`, numbered 1..n                        |                                              |
-| `score`                | 1–20                                                   | includes penalties                           |
-| `teeResult`            | `fairway \| left \| right \| short \| penalty \| null` | required on par 4/5, null on par 3           |
-| `approachYards`        | 1–700 or null                                          | required on par 4/5; par 3 uses hole yardage |
-| `approachLie`          | `tee \| fairway \| rough \| sand \| recovery`          | `tee` only on par 3                          |
-| `gir`                  | boolean                                                |                                              |
-| `missDirection`        | `left \| right \| long \| short \| null`               | only when not GIR                            |
-| `shortGameShots`       | 0–10                                                   | non-putt shots inside ~50 yds                |
-| `shortGameYards`       | 1–60 or null                                           | first short-game shot                        |
-| `shortGameLie`         | `fringe \| fairway \| rough \| sand \| null`           |                                              |
-| `firstPuttFeet`        | 1–150 or null                                          | required iff putts > 0                       |
-| `putts`                | 0–10                                                   | 0 = holed from off the green                 |
-| `penalties`            | 0–10                                                   |                                              |
+A round is self-contained: it carries the par and yardage of every hole it played (`layout`), so
+the SG engine never needs a saved course (ADR 0010).
+
+| Field                | Type / domain                                          | Notes                                        |
+| -------------------- | ------------------------------------------------------ | -------------------------------------------- |
+| `round.id`           | UUID                                                   |                                              |
+| `courseName`, `tees` | string ≤ 100 / ≤ 40, may be empty                      | display and pre-fill only                    |
+| `layout[]`           | `{ number, par, yardage }`                             | one per played hole; par 3–6; yardage 50–800 |
+| `playedOn`           | ISO date                                               | defaults to today in local time              |
+| `notes`              | string ≤ 1000                                          |                                              |
+| `holes[]`            | 1–18 `HoleEntry`, numbered 1..n                        |                                              |
+| `score`              | 1–20                                                   | includes penalties                           |
+| `teeResult`          | `fairway \| left \| right \| short \| penalty \| null` | required on par 4/5, null on par 3           |
+| `approachYards`      | 1–700 or null                                          | required on par 4/5; par 3 uses hole yardage |
+| `approachLie`        | `tee \| fairway \| rough \| sand \| recovery`          | `tee` only on par 3                          |
+| `gir`                | boolean                                                |                                              |
+| `missDirection`      | `left \| right \| long \| short \| null`               | only when not GIR                            |
+| `shortGameShots`     | 0–10                                                   | non-putt shots inside ~50 yds                |
+| `shortGameYards`     | 1–60 or null                                           | first short-game shot                        |
+| `shortGameLie`       | `fringe \| fairway \| rough \| sand \| null`           |                                              |
+| `firstPuttFeet`      | 1–150 or null                                          | required iff putts > 0                       |
+| `putts`              | 0–10                                                   | 0 = holed from off the green                 |
+| `penalties`          | 0–10                                                   |                                              |
 
 The card notation (FR-CARD-01) maps one-to-one onto these fields:
 `Score`→`score`; `Tee`→`teeResult`; `Approach` yards+lie→`approachYards`/`approachLie`;
 `Green` ✓/miss→`gir`/`missDirection`; `Short game` n@yds+lie→`shortGame*`;
-`Putts` n@ft→`putts`/`firstPuttFeet`; `+n`→`penalties`.
+`Putts` n@ft→`putts`/`firstPuttFeet`; `+n`→`penalties`. `parseHoleNotation(line, par)` in
+`packages/shared/src/notation.ts` implements this mapping for the optional card-line shortcut
+(FR-ENTRY-06) and returns a human-readable error naming the first missing or invalid token.
 
 ### Storage
 
-- **Web:** Dexie database `golf-sg`, version 1: `courses: 'id, name'`, `rounds: 'id, courseId, playedOn'`.
+- **Web:** Dexie database `golf-sg`. Version 1: `courses: 'id, name'`, `rounds: 'id, courseId, playedOn'`.
+  Version 2 (FR-ENTRY-07): `rounds: 'id, playedOn'`; its upgrade copies each round's course name,
+  tees and par/yardage into the round (`roundFromV1` in `data/legacy.ts`) and drops `courseId`.
+  Rounds whose course was missing get an empty layout and are hidden, as they were in v1.
   Schema changes add a Dexie version with an upgrade function; never edit an existing version.
 - **Preferences:** per-device UI preferences (comparison baseline) live in `localStorage`
   (`golf-sg.baseline`), not IndexedDB, because they are not user data and will not sync.
@@ -98,8 +110,9 @@ The card notation (FR-CARD-01) maps one-to-one onto these fields:
 
 ### Backup format (FR-DATA-02, FR-DATA-03)
 
-`{ app: 'golf-strokes-gained', version: 1, exportedAt, courses: Course[], rounds: Round[] }`, validated by `backupSchema` and
-then by `roundIssues` against each round's course. Import replaces all data inside a single Dexie
+`{ app: 'golf-strokes-gained', version: 2, exportedAt, courses: Course[], rounds: Round[] }`, validated by `backupSchema` and
+then by `roundIssues(round.holes, round.layout)`. Version 1 files (rounds with `courseId`) are still
+accepted and upgraded with the same `roundFromV1` used by the Dexie migration. Import replaces all data inside a single Dexie
 transaction, so a failed import leaves existing data untouched.
 
 ## 4. Strokes-gained engine (FR-SG-01, NFR-PORT-01)
@@ -145,7 +158,7 @@ two decimals per hole; aggregates sum rounded hole values.
 Known simplifications (ADR 0004): par-5 lay-ups and recoveries before the recorded approach count
 toward off the tee; intermediate long-game positions are not recorded.
 
-## 5. Validation (FR-ENTRY-03, FR-COURSE-03)
+## 5. Validation (FR-ENTRY-03)
 
 `holeEntryIssues(hole, entry)` returns `{ path, message }[]`; `roundIssues` prefixes paths with
 `holes.<i>.` so the UI can highlight the exact cell. Rules:
@@ -181,15 +194,15 @@ well inside NFR-PERF-01's 100 ms phone budget.
 
 ### 7.1 Routes
 
-| Path                              | Page        | PRD                   |
-| --------------------------------- | ----------- | --------------------- |
-| `/`                               | Dashboard   | FR-SG-02..07          |
-| `/rounds`                         | Rounds      | FR-ENTRY-04, FR-SG-06 |
-| `/rounds/new`, `/rounds/:id/edit` | RoundEntry  | FR-ENTRY-01..05       |
-| `/rounds/:id`                     | RoundDetail | FR-SG-01, FR-SG-07    |
-| `/courses`                        | Courses     | FR-COURSE-01..03      |
-| `/guide`                          | CardGuide   | FR-CARD-01..05        |
-| `/backup`                         | Backup      | FR-DATA-02..03        |
+| Path                              | Page        | PRD                            |
+| --------------------------------- | ----------- | ------------------------------ |
+| `/`                               | Dashboard   | FR-HOME-01..04, FR-SG-02..07   |
+| `/rounds`                         | Rounds      | FR-ENTRY-04, FR-SG-06          |
+| `/rounds/new`, `/rounds/:id/edit` | RoundEntry  | FR-ENTRY-01..06, FR-COURSE-03  |
+| `/rounds/:id`                     | RoundDetail | FR-SG-01, FR-SG-07, FR-HOME-03 |
+| `/courses`                        | Courses     | FR-COURSE-01..03               |
+| `/guide`                          | CardGuide   | FR-CARD-01..05                 |
+| `/backup`                         | Backup      | FR-DATA-02..03                 |
 
 `BrowserRouter` uses `import.meta.env.BASE_URL`, so the app can be hosted at a sub-path.
 
@@ -198,8 +211,9 @@ well inside NFR-PERF-01's 100 ms phone budget.
 - `LocalStore` is the only data access layer; components never touch Dexie directly. It validates
   every write with the shared schemas and validation rules and throws `StoreError` with field-level
   issues.
-- `saveRound` validates and writes inside one read-write transaction over `courses` and `rounds`, so
-  a concurrent course deletion in another tab cannot strand a round.
+- `saveRound` validates the round against its own `layout`, then writes it and upserts the saved
+  course (matched by name + tees, case-insensitive; unplayed holes kept from the previous layout)
+  in one read-write transaction (FR-COURSE-01). Saved courses can be edited or deleted freely.
 - TanStack Query caches reads with `networkMode: 'always'` (local data never waits for the network)
   and `staleTime: Infinity`; every mutation invalidates all queries.
 - Query keys include the selected baseline ID (`['stats', limit, baselineId]`, etc.), so switching
@@ -209,7 +223,7 @@ well inside NFR-PERF-01's 100 ms phone budget.
 
 ### 7.3 Offline and updates (FR-PWA-01..04, FR-DATA-04)
 
-- `vite-plugin-pwa` (Workbox `generateSW`) precaches all built JS, CSS, HTML, SVG, PNG, and the
+- `vite-plugin-pwa` (Workbox `generateSW`) precaches all built JS, CSS, HTML, SVG, PNG, WebP, and the
   manifest; navigations fall back to `index.html` (except `/api/*`).
 - `navigator.storage.persist()` is requested at startup.
 - Hosting serves `index.html` and `sw.js` with no-cache and hashed assets as immutable, so a new
@@ -224,9 +238,30 @@ renders it as inline SVG `<path>` elements, so it needs no network, no `data:` U
 `innerHTML`. The encoded URL is `origin + BASE_URL + 'guide'`, so a sheet printed from dev points at
 dev and one printed from prod points at prod.
 
-### 7.5 UI
+### 7.5 Guided round entry (FR-ENTRY-01, FR-ENTRY-05, FR-ENTRY-06)
 
-Desktop-first layout capped at ~1160 px with card grids, responsive down to phones (NFR-UX-01).
+`RoundEntry` is a small state machine: a details step, then for each hole the steps from
+`stepsFor(par)`: `layout → score → tee → approach → green → short → putts → penalties → review`,
+with `tee` and `approach` dropped on par 3s. Single-choice answers (`Choices`, buttons with
+`aria-pressed`) update the draft and advance; steps with a follow-up number (approach yards,
+short-game yards, first putt) show a Next button. A hole whose par and yardage are already known
+(pre-filled from a saved course) starts at `score`. The review step shows the hole as a card line
+and lists `validateRow` issues, each with a Fix link back to the step that owns the field
+(`FIELD_STEP`). The side scorecard (`aria-label="Scorecard"`) shows hole status (todo/done/error),
+jumps to any hole, and finishes the round early. The card-line shortcut runs `parseHoleNotation`
+and jumps straight to the review step. Drafts stay as strings (`HoleDraft`, `LayoutDraft`) and are
+validated with the same shared schema and rules on save.
+
+### 7.6 UI
+
+Responsive layout capped at ~1160 px (NFR-UX-01). Home starts with a full-bleed course photo hero
+(`components/Hero.tsx`, FR-HOME-01): `public/hero-course.webp` (1600 px) and an 800 px variant via
+`image-set`, both precached as `webp` so the hero works offline. The photo is Unsplash `photo-1500932334442-8761ee4810a7`
+(Unsplash License: free for commercial use, no attribution required), re-encoded locally; swap it
+for owned photography before any paid launch. Results lead with
+`PracticeFirst` (weakest category + a drill from `DRILLS`, FR-HOME-03), and the dashboard draws an
+inline SVG `Trend` of total SG per round (FR-HOME-04). Below 640 px the nav becomes a fixed bottom
+tab bar (FR-HOME-05).
 Form controls have labels or `aria-label`s, invalid cells set `aria-invalid`, and errors render
 with `role="alert"` (NFR-A11Y-01).
 
@@ -267,29 +302,32 @@ Region `us-east-1` (CloudFront certificates must live there). Step-by-step: [dep
 
 ## 11. Testing strategy
 
-| Layer      | Tool                     | Scope                                                                                                                            |
-| ---------- | ------------------------ | -------------------------------------------------------------------------------------------------------------------------------- |
-| Domain     | Vitest                   | baselines (interpolation, scratch scaling), SG formulas and the sum invariant, validation rules, insights                        |
-| Data       | Vitest + fake-indexeddb  | LocalStore CRUD, validation, transactions, course-edit conflicts, backup import, baseline selection                              |
-| Components | Vitest + Testing Library | every page, including baseline switching, card guide, pocket sheet and QR                                                        |
-| API        | Vitest + Fastify inject  | health, static SPA fallback, data routes absent                                                                                  |
-| End-to-end | Playwright               | production build: course → round → SG → priorities; service worker ready → offline reload with data; card guide and pocket sheet |
-| Infra      | cfn-lint, checkov        | template validity and security posture (skips justified inline)                                                                  |
+| Layer      | Tool                     | Scope                                                                                                                                                           |
+| ---------- | ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Domain     | Vitest                   | baselines (interpolation, scratch scaling), SG formulas and the sum invariant, validation rules, insights                                                       |
+| Data       | Vitest + fake-indexeddb  | LocalStore CRUD, saved-course upsert and pre-fill, Dexie v1→v2 migration, v1/v2 backup import, baseline selection                                               |
+| Components | Vitest + Testing Library | every page, including baseline switching, card guide, pocket sheet and QR                                                                                       |
+| API        | Vitest + Fastify inject  | health, static SPA fallback, data routes absent                                                                                                                 |
+| End-to-end | Playwright               | production build: hero → guided round with no course setup (incl. card line) → SG → practice card → pre-filled next round; offline reload with data; card guide |
+| Infra      | cfn-lint, checkov        | template validity and security posture (skips justified inline)                                                                                                 |
 
 ## 12. Traceability matrix
 
-| Requirement             | Implementation                                                                                                  | Verification                                                   |
-| ----------------------- | --------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------- |
-| FR-CARD-01..05          | `apps/web/src/pages/CardGuide.tsx`, `components/QrCode.tsx`                                                     | `pages.test.tsx` (card guide), `e2e/golf.spec.ts` (card guide) |
-| FR-COURSE-01..03        | `data/store.ts` (`saveCourse`, `deleteCourse`), `pages/Courses.tsx`                                             | `store.test.ts`, `pages.test.tsx` (Courses)                    |
-| FR-ENTRY-01..05         | `pages/RoundEntry.tsx`, `shared/validation.ts`, `store.saveRound`                                               | `validation.test.ts`, `store.test.ts`, `pages.test.tsx`, E2E   |
-| FR-SG-01                | `shared/strokes-gained.ts`                                                                                      | `strokes-gained.test.ts` (sum invariant)                       |
-| FR-SG-02..06            | `shared/insights.ts`, `pages/Dashboard.tsx`                                                                     | `insights.test.ts`, `pages.test.tsx`, E2E                      |
-| FR-SG-07                | `shared/baseline.ts` (`scratchBaseline`, `getBaseline`), `data/preferences.ts`, `components/BaselineSelect.tsx` | `baseline.test.ts`, `store.test.ts`, `pages.test.tsx`          |
-| FR-DATA-01..04          | `data/db.ts`, `data/store.ts`, `pages/Backup.tsx`, `main.tsx`                                                   | `store.test.ts`, `pages.test.tsx` (Backup)                     |
-| FR-PWA-01..04           | `vite.config.ts`, `components/OfflineBadge.tsx`, `web.yml` cache behaviors                                      | E2E offline test, deploy smoke test                            |
-| NFR-SEC-01, NFR-OPS-01  | `infra/cloudformation/*`, `deploy-web.yml`, `release.yml`, `scripts/aws-bootstrap.sh`                           | cfn-lint, checkov, deploy smoke test                           |
-| NFR-SEC-02, NFR-QUAL-01 | `.github/workflows/*`, `.github/dependabot.yml`                                                                 | required `CI OK` check                                         |
+| Requirement             | Implementation                                                                                                                        | Verification                                                                      |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| FR-CARD-01..05          | `apps/web/src/pages/CardGuide.tsx`, `components/QrCode.tsx`                                                                           | `pages.test.tsx` (card guide), `e2e/golf.spec.ts` (card guide)                    |
+| FR-COURSE-01..03        | `data/store.ts` (`saveRound`, `findCourse`, `saveCourse`, `deleteCourse`), `pages/Courses.tsx`, `pages/RoundEntry.tsx` (`pickCourse`) | `store.test.ts`, `pages.test.tsx` (Courses, RoundEntry), E2E                      |
+| FR-ENTRY-01..05         | `pages/RoundEntry.tsx`, `components/scorecard.ts`, `shared/validation.ts`, `store.saveRound`                                          | `validation.test.ts`, `scorecard.test.ts`, `store.test.ts`, `pages.test.tsx`, E2E |
+| FR-ENTRY-06             | `shared/notation.ts` (`parseHoleNotation`), `pages/RoundEntry.tsx`                                                                    | `notation.test.ts`, `pages.test.tsx`, E2E                                         |
+| FR-ENTRY-07             | `data/db.ts` (version 2 upgrade), `data/legacy.ts`, `store.importBackup`                                                              | `store.test.ts` (migration, v1 backup)                                            |
+| FR-HOME-01..05          | `components/Hero.tsx`, `components/Practice.tsx`, `components/Trend.tsx`, `App.tsx`, `styles.css`                                     | `pages.test.tsx` (Dashboard, RoundDetail), E2E                                    |
+| FR-SG-01                | `shared/strokes-gained.ts`                                                                                                            | `strokes-gained.test.ts` (sum invariant)                                          |
+| FR-SG-02..06            | `shared/insights.ts`, `pages/Dashboard.tsx`                                                                                           | `insights.test.ts`, `pages.test.tsx`, E2E                                         |
+| FR-SG-07                | `shared/baseline.ts` (`scratchBaseline`, `getBaseline`), `data/preferences.ts`, `components/BaselineSelect.tsx`                       | `baseline.test.ts`, `store.test.ts`, `pages.test.tsx`                             |
+| FR-DATA-01..04          | `data/db.ts`, `data/store.ts`, `pages/Backup.tsx`, `main.tsx`                                                                         | `store.test.ts`, `pages.test.tsx` (Backup)                                        |
+| FR-PWA-01..04           | `vite.config.ts`, `components/OfflineBadge.tsx`, `web.yml` cache behaviors                                                            | E2E offline test, deploy smoke test                                               |
+| NFR-SEC-01, NFR-OPS-01  | `infra/cloudformation/*`, `deploy-web.yml`, `release.yml`, `scripts/aws-bootstrap.sh`                                                 | cfn-lint, checkov, deploy smoke test                                              |
+| NFR-SEC-02, NFR-QUAL-01 | `.github/workflows/*`, `.github/dependabot.yml`                                                                                       | required `CI OK` check                                                            |
 
 ## 13. Phase 2+ architecture (design intent)
 

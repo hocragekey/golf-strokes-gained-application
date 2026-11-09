@@ -1,4 +1,4 @@
-import type { CourseInput, HoleEntryInput } from '@golf-sg/shared';
+import type { CourseInput, HoleEntryInput, RoundInput } from '@golf-sg/shared';
 
 export const courseInput: CourseInput = {
   name: 'Pebble Creek',
@@ -34,3 +34,12 @@ export const par3ThreePutt: HoleEntryInput = {
   firstPuttFeet: 30,
   putts: 3,
 };
+
+/** A round at the fixture course, carrying the par and yardage of each played hole. */
+export const roundInput = (holes: HoleEntryInput[]): RoundInput => ({
+  courseName: courseInput.name,
+  tees: courseInput.tees ?? '',
+  playedOn: '2026-05-01',
+  layout: courseInput.holes.slice(0, holes.length),
+  holes,
+});

@@ -1,8 +1,10 @@
 import { CATEGORY_LABELS, type BucketStat } from '@golf-sg/shared';
 import { useState } from 'react';
-import { Link } from 'react-router';
 import { useStats } from '../data/hooks';
 import { BaselineSelect } from '../components/BaselineSelect';
+import { Hero, HowItWorks } from '../components/Hero';
+import { PracticeFirst } from '../components/Practice';
+import { Trend } from '../components/Trend';
 import { SgBars, SgValue } from '../components/Sg';
 import { formatNumber, formatPct } from '../format';
 
@@ -66,27 +68,18 @@ export function Dashboard() {
   const s = stats.data;
   if (s.rounds === 0) {
     return (
-      <section className="card">
-        <h2>Welcome</h2>
-        <p>Turn your scorecard into strokes-gained stats in three steps:</p>
-        <ol>
-          <li>
-            Read the <Link to="/guide">card guide</Link> and mark a few numbers on each hole.
-          </li>
-          <li>
-            Add your <Link to="/courses">course</Link> (par and yardage per hole).
-          </li>
-          <li>
-            <Link to="/rounds/new">Enter your round</Link> when you get home.
-          </li>
-        </ol>
-      </section>
+      <div className="stack">
+        <Hero />
+        <HowItWorks />
+      </div>
     );
   }
 
+  const top = s.priorities[0];
   const t = s.traditional;
   return (
     <div className="stack">
+      <Hero compact />
       <div className="card-header">
         <h2>
           Strokes gained per 18 <span className="muted small">vs {s.baseline} baseline</span>
@@ -111,22 +104,34 @@ export function Dashboard() {
         </div>
       </div>
       <div className="grid-2">
+        <div className="stack">
+          {top && (
+            <PracticeFirst
+              category={top.category}
+              value={top.sgPer18}
+              focus={top.focus}
+              per="per 18"
+            />
+          )}
+          <section className="card">
+            <h3>Practice priorities</h3>
+            <ol className="priorities">
+              {s.priorities.map((p) => (
+                <li key={p.category}>
+                  <strong>{CATEGORY_LABELS[p.category]}</strong> <SgValue value={p.sgPer18} />
+                  <div className="muted small">{p.focus}</div>
+                </li>
+              ))}
+            </ol>
+          </section>
+        </div>
         <section className="card">
           <h3>
             {s.rounds} round{s.rounds === 1 ? '' : 's'}, {s.holes} holes
           </h3>
           <SgBars sg={s.sgPer18} />
-        </section>
-        <section className="card">
-          <h3>Practice priorities</h3>
-          <ol className="priorities">
-            {s.priorities.map((p) => (
-              <li key={p.category}>
-                <strong>{CATEGORY_LABELS[p.category]}</strong> <SgValue value={p.sgPer18} />
-                <div className="muted small">{p.focus}</div>
-              </li>
-            ))}
-          </ol>
+          <h4>Trend</h4>
+          <Trend rounds={s.trend} />
         </section>
       </div>
       <section className="card">

@@ -45,8 +45,8 @@ const EXAMPLES: [hole: string, line: string, story: string][] = [
   ['Par 3, 160 yds', '3 ✓ 2@25', 'Green in regulation from the tee, two-putt from 25 ft.'],
   [
     'Par 5, 520 yds',
-    '6 P 90 ✓ 2@30 +1',
-    'Drive out of bounds (+1), wedge from 90 yds onto the green, two-putt from 30 ft.',
+    '6 P 90 L 1@12 1@3 +1',
+    'Drive out of bounds (+1), re-tee, 90 yds approach misses left, chip to 3 ft, one putt.',
   ],
 ];
 

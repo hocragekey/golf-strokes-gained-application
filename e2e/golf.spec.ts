@@ -1,53 +1,59 @@
 import { expect, test, type Page } from '@playwright/test';
 
-async function addNineHoleCourse(page: Page, name: string) {
-  await page.getByRole('link', { name: 'Courses' }).click();
-  await page.getByRole('button', { name: 'Add course' }).click();
-  await page.getByLabel('Course name').fill(name);
-  await page.getByLabel('Holes').selectOption('9');
-  await page.getByLabel('Hole 2 par').selectOption('3');
-  await page.getByLabel('Hole 2 yards').fill('165');
-  await page.getByRole('button', { name: 'Add course' }).click();
-  await expect(page.getByText(name)).toBeVisible();
+async function answerHoleOne(page: Page) {
+  const tap = (name: string) => page.getByRole('button', { name, exact: true }).click();
+  await page.getByLabel('Yards').fill('410');
+  await tap('Next');
+  await tap('5 Bogey');
+  await tap('Right');
+  await page.getByLabel('Approach yards').fill('165');
+  await tap('Rough');
+  await tap('Next');
+  await tap('Missed short');
+  await tap('1');
+  await page.getByLabel('Short-game yards').fill('15');
+  await tap('Bunker');
+  await tap('Next');
+  await tap('1');
+  await page.getByLabel('First putt').fill('4');
+  await tap('Next');
+  await tap('None');
 }
 
-async function enterTwoHoles(page: Page) {
-  await page.getByRole('link', { name: 'Enter round' }).first().click();
-  await page.getByLabel('Hole 1 score').fill('5');
-  await page.getByLabel('Hole 1 teeResult').selectOption('right');
-  await page.getByLabel('Hole 1 approachYards').fill('165');
-  await page.getByLabel('Hole 1 approachLie').selectOption('rough');
-  await page.getByLabel('Hole 1 missDirection').selectOption('short');
-  await page.getByLabel('Hole 1 shortGameShots').fill('1');
-  await page.getByLabel('Hole 1 shortGameYards').fill('15');
-  await page.getByLabel('Hole 1 shortGameLie').selectOption('sand');
-  await page.getByLabel('Hole 1 firstPuttFeet').fill('4');
-  await page.getByLabel('Hole 1 putts').fill('1');
-
-  await page.getByLabel('Hole 2 score').fill('4');
-  await page.getByLabel('Hole 2 gir').check();
-  await page.getByLabel('Hole 2 firstPuttFeet').fill('35');
-  await page.getByLabel('Hole 2 putts').fill('3');
-  await page.getByRole('button', { name: 'Calculate strokes gained' }).click();
-}
-
-test('records a round and shows strokes gained, then works offline', async ({ page, context }) => {
+test('records a round with no course setup, then works offline', async ({ page, context }) => {
   await page.goto('/');
-  await expect(page.getByRole('heading', { name: 'Welcome' })).toBeVisible();
-  await addNineHoleCourse(page, 'Riverside Nine');
+  await expect(page.getByRole('heading', { name: 'Improve your golf game' })).toBeVisible();
+  await page.getByRole('link', { name: 'Enter a round' }).click();
 
-  await page.getByRole('link', { name: 'Enter round' }).first().click();
-  await page.getByLabel('Hole 1 score').fill('4');
-  await page.getByRole('button', { name: 'Calculate strokes gained' }).click();
-  await expect(page.getByText('1 hole need attention')).toBeVisible();
-  await page.getByRole('link', { name: 'Dashboard' }).click();
+  await page.getByLabel('Course (optional)').fill('Riverside Nine');
+  await page.getByRole('button', { name: '9 holes' }).click();
+  await page.getByRole('button', { name: 'Start with hole 1' }).click();
+  await answerHoleOne(page);
+  await expect(page.getByText('5 R 165r Sh 1@15s 1@4')).toBeVisible();
 
-  await enterTwoHoles(page);
+  // Hole 2 via the optional card-line shortcut.
+  await page.getByRole('button', { name: 'Next hole' }).click();
+  await page.getByRole('button', { name: 'Par 3', exact: true }).click();
+  await page.getByLabel('Yards').fill('165');
+  await page.getByRole('button', { name: 'Next', exact: true }).click();
+  await page.getByText('Type the card line instead').click();
+  await page.getByLabel('Card line').fill('4 ✓ 3@35');
+  await page.getByLabel('Card line').press('Enter');
+  await expect(page.getByText('Looks good.')).toBeVisible();
+  await page.getByRole('button', { name: 'Finish after 2 holes' }).click();
+
   await expect(page.getByRole('heading', { name: 'Riverside Nine' })).toBeVisible();
   await expect(page.getByText(/9 \(\+2\)/)).toBeVisible();
   await expect(page.getByRole('list', { name: 'Strokes gained by category' })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Practice this first' })).toBeVisible();
 
-  await page.getByRole('link', { name: 'Dashboard' }).click();
+  // The next round at the same course is pre-filled from the first one.
+  await page.getByRole('link', { name: 'New round' }).click();
+  await page.getByLabel('Course (optional)').fill('Riverside Nine');
+  await page.getByRole('button', { name: 'Start with hole 1' }).click();
+  await expect(page.getByRole('button', { name: 'Par 4 · 410 yds' })).toBeVisible();
+
+  await page.getByRole('link', { name: 'Home' }).click();
   await expect(page.getByRole('heading', { name: 'Practice priorities' })).toBeVisible();
 
   // The service worker precaches the app shell; data lives in IndexedDB.

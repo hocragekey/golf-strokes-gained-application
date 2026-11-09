@@ -25,9 +25,8 @@ export const courseInputSchema = z
   .object({
     name: z.string().trim().min(1, 'Name is required').max(100),
     tees: z.string().trim().max(40).default(''),
-    holes: z.array(courseHoleSchema).refine((h) => h.length === 9 || h.length === 18, {
-      message: 'A course must have 9 or 18 holes',
-    }),
+    // Saved courses are pre-fill shortcuts, so a partial layout from a short round is fine.
+    holes: z.array(courseHoleSchema).min(1, 'A course needs at least one hole').max(18),
   })
   .refine((c) => c.holes.every((h, i) => h.number === i + 1), {
     message: 'Holes must be numbered consecutively from 1',
@@ -70,25 +69,38 @@ export const holeEntrySchema = z.object({
 export type HoleEntryInput = z.input<typeof holeEntrySchema>;
 export type HoleEntry = z.output<typeof holeEntrySchema>;
 
+/**
+ * A round carries the par and yardage of every hole it played (copied from the scorecard), so
+ * it never depends on a saved course. `courseName` is optional and only used for display and
+ * to pre-fill the next round at the same course.
+ */
 export const roundInputSchema = z
   .object({
-    courseId: id,
+    courseName: z.string().trim().max(100).default(''),
+    tees: z.string().trim().max(40).default(''),
     playedOn: isoDate,
     notes: z.string().trim().max(1000).default(''),
+    layout: z.array(courseHoleSchema).min(1).max(18),
     holes: z.array(holeEntrySchema).min(1).max(18),
   })
   .refine((r) => r.holes.every((h, i) => h.holeNumber === i + 1), {
     message: 'Holes must be numbered consecutively from 1',
     path: ['holes'],
-  });
+  })
+  .refine(
+    (r) => r.layout.length === r.holes.length && r.layout.every((h, i) => h.number === i + 1),
+    { message: 'Every played hole needs a par and yardage', path: ['layout'] },
+  );
 export type RoundInput = z.input<typeof roundInputSchema>;
 export type ValidRoundInput = z.output<typeof roundInputSchema>;
 
 export const roundSchema = z.object({
   id,
-  courseId: id,
+  courseName: z.string(),
+  tees: z.string(),
   playedOn: isoDate,
   notes: z.string(),
+  layout: z.array(courseHoleSchema).min(1).max(18),
   holes: z.array(holeEntrySchema).min(1).max(18),
   createdAt: timestamp,
   updatedAt: timestamp,
@@ -113,7 +125,6 @@ export type HoleSg = z.infer<typeof holeSgSchema>;
 
 export const roundSummarySchema = z.object({
   id,
-  courseId: id,
   courseName: z.string(),
   playedOn: isoDate,
   holesPlayed: z.number().int(),
@@ -125,7 +136,6 @@ export type RoundSummary = z.infer<typeof roundSummarySchema>;
 
 export const roundDetailSchema = z.object({
   round: roundSchema,
-  course: courseSchema,
   summary: roundSummarySchema,
   holes: z.array(holeSgSchema),
 });

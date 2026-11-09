@@ -147,7 +147,7 @@ export function Courses() {
     <div className="stack">
       <section className="card">
         <div className="card-header">
-          <h2>Courses</h2>
+          <h2>Saved courses</h2>
           {editing === null && (
             <button
               className="primary"
@@ -174,7 +174,10 @@ export function Courses() {
           </p>
         )}
         {courses.data?.length === 0 && editing === null && (
-          <p className="muted">Add the course you played: par and yardage for each hole.</p>
+          <p className="muted">
+            Nothing saved yet. Courses are remembered automatically when you name one while entering
+            a round, so you never have to set one up first.
+          </p>
         )}
         <ul className="list">
           {courses.data?.map((c) => (
