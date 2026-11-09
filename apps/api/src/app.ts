@@ -30,7 +30,18 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
     bodyLimit: 256 * 1024,
   });
 
-  await server.register(helmet);
+  // Same CSP as CloudFront (web.yml), allowing Google Identity Services for optional sign-in.
+  await server.register(helmet, {
+    contentSecurityPolicy: {
+      directives: {
+        scriptSrc: ["'self'", 'https://accounts.google.com/gsi/client'],
+        styleSrc: ["'self'", "'unsafe-inline'", 'https://accounts.google.com/gsi/style'],
+        imgSrc: ["'self'", 'data:', 'https://*.googleusercontent.com'],
+        connectSrc: ["'self'", 'https://accounts.google.com/gsi/'],
+        frameSrc: ['https://accounts.google.com/gsi/'],
+      },
+    },
+  });
 
   server.setErrorHandler((err, req, reply) => {
     const statusCode = statusOf(err);
