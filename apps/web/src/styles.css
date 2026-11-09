@@ -979,3 +979,43 @@ nav a.nav-cta:not(.active) {
   width: 4.5rem;
   text-align: center;
 }
+
+.account .google-button {
+  min-height: 44px;
+}
+
+.account-profile {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.account-profile img {
+  border-radius: 50%;
+}
+
+.sync-line {
+  font-weight: 600;
+}
+
+.sync-error,
+.sync-signin {
+  color: var(--danger, #b91c1c);
+}
+
+.checkbox {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.button.secondary {
+  background: transparent;
+  color: inherit;
+  border: 1px solid var(--border);
+}
+
+.nav-attention::after {
+  content: ' •';
+  color: var(--danger, #b91c1c);
+}

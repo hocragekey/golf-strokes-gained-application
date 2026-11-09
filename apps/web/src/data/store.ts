@@ -17,6 +17,7 @@ import {
   type RoundSummary,
   type Stats,
 } from '@golf-sg/shared';
+import { changeKey, type SyncKind } from '@golf-sg/shared';
 import { z, type ZodType } from 'zod';
 import { GolfDb } from './db';
 import { backupV1Schema, roundFromV1 } from './legacy';
@@ -75,6 +76,11 @@ function mergeLayout(saved: readonly CourseHole[], played: readonly CourseHole[]
 export class LocalStore {
   constructor(readonly db: GolfDb = new GolfDb()) {}
 
+  /** Records a local change in the sync outbox (pushed when signed in and online). */
+  private async track(kind: SyncKind, id: string, updatedAt: string, deleted = false) {
+    await this.db.pending.put({ key: changeKey(kind, id), kind, id, updatedAt, deleted });
+  }
+
   listCourses(): Promise<Course[]> {
     return this.db.courses.orderBy('name').toArray();
   }
@@ -104,17 +110,26 @@ export class LocalStore {
         createdAt: now(),
         updatedAt: now(),
       };
-      await this.db.courses.add(course);
+      await this.db.transaction('rw', this.db.courses, this.db.pending, async () => {
+        await this.db.courses.add(course);
+        await this.track('course', course.id, course.updatedAt);
+      });
       return course;
     }
     const course: Course = { ...(await this.getCourse(id)), ...data, updatedAt: now() };
-    await this.db.courses.put(course);
+    await this.db.transaction('rw', this.db.courses, this.db.pending, async () => {
+      await this.db.courses.put(course);
+      await this.track('course', course.id, course.updatedAt);
+    });
     return course;
   }
 
   /** Saved courses are only shortcuts: rounds keep their own par and yardage. */
   async deleteCourse(id: string): Promise<void> {
-    await this.db.courses.delete(id);
+    await this.db.transaction('rw', this.db.courses, this.db.pending, async () => {
+      await this.db.courses.delete(id);
+      await this.track('course', id, now(), true);
+    });
   }
 
   private async rounds(limit?: number): Promise<Round[]> {
@@ -142,7 +157,8 @@ export class LocalStore {
     const issues = roundIssues(data.holes, data.layout);
     if (issues.length > 0) throw new StoreError('Scorecard has errors', issues);
 
-    const roundId = await this.db.transaction('rw', this.db.courses, this.db.rounds, async () => {
+    const tables = [this.db.courses, this.db.rounds, this.db.pending];
+    const roundId = await this.db.transaction('rw', tables, async () => {
       const existing = id === undefined ? undefined : await this.db.rounds.get(id);
       if (id !== undefined && !existing) throw new StoreError('Round not found');
       const round: Round = {
@@ -152,20 +168,23 @@ export class LocalStore {
         updatedAt: now(),
       };
       await this.db.rounds.put(round);
+      await this.track('round', round.id, round.updatedAt);
 
       if (data.courseName !== '') {
         const saved = (await this.db.courses.toArray()).find((c) =>
           sameCourse(c, data.courseName, data.tees),
         );
         const holes = mergeLayout(saved?.holes ?? [], data.layout);
-        await this.db.courses.put({
+        const course: Course = {
           id: saved?.id ?? crypto.randomUUID(),
           name: data.courseName,
           tees: data.tees,
           holes,
           createdAt: saved?.createdAt ?? now(),
           updatedAt: now(),
-        });
+        };
+        await this.db.courses.put(course);
+        await this.track('course', course.id, course.updatedAt);
       }
       return round.id;
     });
@@ -173,7 +192,10 @@ export class LocalStore {
   }
 
   async deleteRound(id: string): Promise<void> {
-    await this.db.rounds.delete(id);
+    await this.db.transaction('rw', this.db.rounds, this.db.pending, async () => {
+      await this.db.rounds.delete(id);
+      await this.track('round', id, now(), true);
+    });
   }
 
   async getStats(limit?: number, baselineId?: string): Promise<Stats> {
@@ -206,10 +228,22 @@ export class LocalStore {
         throw new StoreError(`Round ${round.playedOn} is invalid`, issues);
       }
     }
-    await this.db.transaction('rw', this.db.courses, this.db.rounds, async () => {
+    const tables = [this.db.courses, this.db.rounds, this.db.pending];
+    await this.db.transaction('rw', tables, async () => {
+      const kept = new Set([...backup.courses, ...backup.rounds].map((e) => e.id));
+      const removed = [
+        ...(await this.db.courses.toCollection().primaryKeys()).map(
+          (id) => ['course', id] as const,
+        ),
+        ...(await this.db.rounds.toCollection().primaryKeys()).map((id) => ['round', id] as const),
+      ].filter(([, id]) => !kept.has(id));
       await Promise.all([this.db.courses.clear(), this.db.rounds.clear()]);
       await this.db.courses.bulkPut(backup.courses);
       await this.db.rounds.bulkPut(backup.rounds);
+      const deletedAt = now();
+      for (const [kind, id] of removed) await this.track(kind, id, deletedAt, true);
+      for (const c of backup.courses) await this.track('course', c.id, c.updatedAt);
+      for (const r of backup.rounds) await this.track('round', r.id, r.updatedAt);
     });
     return { courses: backup.courses.length, rounds: backup.rounds.length };
   }

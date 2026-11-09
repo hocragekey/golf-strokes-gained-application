@@ -1,5 +1,7 @@
 import { NavLink, Route, Routes } from 'react-router';
+import { useAccount } from './auth/context';
 import { OfflineBadge } from './components/OfflineBadge';
+import { Account } from './pages/Account';
 import { Backup } from './pages/Backup';
 import { CardGuide } from './pages/CardGuide';
 import { Courses } from './pages/Courses';
@@ -10,6 +12,7 @@ import { RoundEntry } from './pages/RoundEntry';
 import { Rounds } from './pages/Rounds';
 
 export function App() {
+  const { enabled, profile, status } = useAccount();
   return (
     <div className="layout">
       <header className="topbar no-print">
@@ -29,6 +32,14 @@ export function App() {
           </NavLink>
           <NavLink to="/guide">Card guide</NavLink>
           <NavLink to="/backup">Backup</NavLink>
+          {enabled && (
+            <NavLink
+              to="/account"
+              className={status.state === 'signin' ? 'nav-attention' : undefined}
+            >
+              {profile ? (profile.givenName ?? 'Account') : 'Sign in'}
+            </NavLink>
+          )}
         </nav>
         <OfflineBadge />
       </header>
@@ -42,6 +53,7 @@ export function App() {
           <Route path="/courses" element={<Courses />} />
           <Route path="/guide" element={<CardGuide />} />
           <Route path="/backup" element={<Backup />} />
+          <Route path="/account" element={<Account />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </main>
