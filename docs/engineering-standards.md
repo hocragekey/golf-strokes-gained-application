@@ -22,12 +22,13 @@ gh api -X POST repos/hocragekey/golf-strokes-gained-application/rulesets \
 
 ## CI (every PR, push to `main`, merge queue)
 
-| Workflow       | Jobs                                                                                                                                             |
-| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `ci.yml`       | format check, lint, typecheck, unit tests with coverage gate, build; Playwright E2E incl. offline; Docker build + smoke test; aggregated `CI OK` |
-| `security.yml` | dependency review (PRs), gitleaks secret scan, actionlint + zizmor workflow audit; weekly schedule                                               |
-| `codeql.yml`   | CodeQL `security-extended` for TypeScript and Actions; weekly schedule                                                                           |
-| `pr-title.yml` | Conventional Commit PR title                                                                                                                     |
+| Workflow         | Jobs                                                                                                                                             |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `ci.yml`         | format check, lint, typecheck, unit tests with coverage gate, build; Playwright E2E incl. offline; Docker build + smoke test; aggregated `CI OK` |
+| `security.yml`   | dependency review (PRs), gitleaks secret scan, actionlint + zizmor workflow audit; weekly schedule                                               |
+| `codeql.yml`     | CodeQL `security-extended` for TypeScript and Actions; weekly schedule                                                                           |
+| `ci.yml` (infra) | `cfn-lint` + `checkov` on `infra/cloudformation`                                                                                                 |
+| `pr-title.yml`   | Conventional Commit PR title                                                                                                                     |
 
 Rules for workflows: actions pinned by SHA with a version comment, top-level
 `permissions: contents: read`, per-job escalation only, `persist-credentials: false`,
@@ -41,12 +42,10 @@ On a release-please release:
 1. **Container image** to GHCR: multi-arch (amd64/arm64), BuildKit SBOM and max-mode
    provenance, keyless cosign signature and GitHub build-provenance attestation, all via OIDC
    (no long-lived credentials).
-2. **PWA to GitHub Pages** through the `github-pages` environment. Add required reviewers to
-   that environment to gate production deploys.
-
-`workflow_dispatch` re-deploys Pages from `main` without cutting a release.
-
-One-time setup (repo admin): Settings, then Pages, then Source: **GitHub Actions**.
+2. **PWA to AWS** (S3 + CloudFront, CloudFormation, GitHub OIDC) via the reusable
+   `deploy-web.yml`: `dev` on every push to `main`, `prod` on each release after `dev`
+   succeeds, gated by a required reviewer on the `prod` environment. Deploys are off until
+   the repo variable `AWS_DEPLOY_ENABLED` is `true`. See [Deploying to AWS](deploy-aws.md).
 
 ## Testing pyramid
 

@@ -1,0 +1,270 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >-
+  Golf Strokes Gained - static PWA hosting for one environment. Private S3 origin behind
+  CloudFront (OAC), HTTPS only, security headers, SPA routing, optional custom domain.
+
+Parameters:
+  AppName:
+    Type: String
+    Default: golf-sg
+    AllowedPattern: '^[a-z][a-z0-9-]{1,20}$'
+  Environment:
+    Type: String
+    AllowedValues: [dev, prod]
+  DomainName:
+    Type: String
+    Default: ''
+    Description: Optional custom hostname, e.g. golf.example.com
+  AcmCertificateArn:
+    Type: String
+    Default: ''
+    Description: ACM certificate in us-east-1 covering DomainName (required with DomainName)
+    AllowedPattern: '^$|^arn:aws[a-zA-Z-]*:acm:us-east-1:\d{12}:certificate/.+$'
+  HostedZoneId:
+    Type: String
+    Default: ''
+    Description: Optional Route 53 hosted zone for DomainName; creates the alias records
+  PriceClass:
+    Type: String
+    Default: PriceClass_100
+    AllowedValues: [PriceClass_100, PriceClass_200, PriceClass_All]
+
+Conditions:
+  HasDomain: !Not [!Equals [!Ref DomainName, '']]
+  HasDns: !And [!Condition HasDomain, !Not [!Equals [!Ref HostedZoneId, '']]]
+
+Rules:
+  DomainNeedsCertificate:
+    RuleCondition: !Not [!Equals [!Ref DomainName, '']]
+    Assertions:
+      - Assert: !Not [!Equals [!Ref AcmCertificateArn, '']]
+        AssertDescription: AcmCertificateArn is required when DomainName is set
+
+Resources:
+  SiteBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Metadata:
+      checkov:
+        skip:
+          - id: CKV_AWS_18
+            comment: Build artefacts only; every deploy is reproducible from git. CloudFront is the sole reader.
+    Properties:
+      BucketName: !Sub ${AppName}-web-${Environment}-${AWS::AccountId}
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: BucketOwnerEnforced
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      VersioningConfiguration:
+        Status: Enabled
+      LifecycleConfiguration:
+        Rules:
+          - Id: expire-old-builds
+            Status: Enabled
+            NoncurrentVersionExpiration:
+              NoncurrentDays: 30
+            AbortIncompleteMultipartUpload:
+              DaysAfterInitiation: 1
+      Tags:
+        - Key: app
+          Value: !Ref AppName
+        - Key: environment
+          Value: !Ref Environment
+
+  SiteBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref SiteBucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: CloudFrontRead
+            Effect: Allow
+            Principal:
+              Service: cloudfront.amazonaws.com
+            Action: s3:GetObject
+            Resource: !Sub ${SiteBucket.Arn}/*
+            Condition:
+              StringEquals:
+                AWS:SourceArn: !Sub arn:${AWS::Partition}:cloudfront::${AWS::AccountId}:distribution/${Distribution}
+          - Sid: DenyInsecureTransport
+            Effect: Deny
+            Principal: '*'
+            Action: s3:*
+            Resource:
+              - !GetAtt SiteBucket.Arn
+              - !Sub ${SiteBucket.Arn}/*
+            Condition:
+              Bool:
+                aws:SecureTransport: 'false'
+
+  OriginAccessControl:
+    Type: AWS::CloudFront::OriginAccessControl
+    Properties:
+      OriginAccessControlConfig:
+        Name: !Sub ${AppName}-web-${Environment}
+        OriginAccessControlOriginType: s3
+        SigningBehavior: always
+        SigningProtocol: sigv4
+
+  # Client-side routes (/rounds/<id>) have no file extension; serve the app shell for them.
+  SpaRewriteFunction:
+    Type: AWS::CloudFront::Function
+    Properties:
+      Name: !Sub ${AppName}-web-${Environment}-spa
+      AutoPublish: true
+      FunctionConfig:
+        Comment: Rewrite extension-less paths to /index.html
+        Runtime: cloudfront-js-2.0
+      FunctionCode: |
+        function handler(event) {
+          var request = event.request;
+          if (!request.uri.split('/').pop().includes('.')) {
+            request.uri = '/index.html';
+          }
+          return request;
+        }
+
+  SecurityHeadersPolicy:
+    Type: AWS::CloudFront::ResponseHeadersPolicy
+    Properties:
+      ResponseHeadersPolicyConfig:
+        Name: !Sub ${AppName}-web-${Environment}-security
+        SecurityHeadersConfig:
+          ContentSecurityPolicy:
+            Override: true
+            ContentSecurityPolicy: >-
+              default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline';
+              img-src 'self' data:; font-src 'self'; connect-src 'self'; manifest-src 'self';
+              worker-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self';
+              frame-ancestors 'none'; upgrade-insecure-requests
+          ContentTypeOptions:
+            Override: true
+          FrameOptions:
+            FrameOption: DENY
+            Override: true
+          ReferrerPolicy:
+            ReferrerPolicy: strict-origin-when-cross-origin
+            Override: true
+          StrictTransportSecurity:
+            AccessControlMaxAgeSec: 63072000
+            IncludeSubdomains: true
+            Preload: false
+            Override: true
+
+  Distribution:
+    Type: AWS::CloudFront::Distribution
+    Metadata:
+      cfn-lint:
+        config:
+          ignore_checks:
+            - W1030 # AcmCertificateArn defaults to '' but is only used when HasDomain is true
+      checkov:
+        skip:
+          - id: CKV_AWS_68
+            comment: Static, unauthenticated PWA with no server-side data; WAF cost is not justified yet.
+          - id: CKV_AWS_86
+            comment: Access logging deferred until there is real traffic (needs an ACL-enabled log bucket).
+          - id: CKV_AWS_310
+            comment: Single S3 origin; there is no secondary origin to fail over to.
+          - id: CKV_AWS_374
+            comment: The app is intended to be usable worldwide; no geo restriction.
+          - id: CKV_AWS_174
+            comment: TLSv1.2_2021 is enforced with a custom domain; the default *.cloudfront.net certificate cannot be pinned.
+    Properties:
+      DistributionConfig:
+        Comment: !Sub ${AppName} web (${Environment})
+        Enabled: true
+        HttpVersion: http2and3
+        IPV6Enabled: true
+        PriceClass: !Ref PriceClass
+        DefaultRootObject: index.html
+        Aliases: !If [HasDomain, [!Ref DomainName], !Ref AWS::NoValue]
+        ViewerCertificate: !If
+          - HasDomain
+          - AcmCertificateArn: !Ref AcmCertificateArn
+            SslSupportMethod: sni-only
+            MinimumProtocolVersion: TLSv1.2_2021
+          - CloudFrontDefaultCertificate: true
+        Origins:
+          - Id: site
+            DomainName: !GetAtt SiteBucket.RegionalDomainName
+            OriginAccessControlId: !GetAtt OriginAccessControl.Id
+            S3OriginConfig:
+              OriginAccessIdentity: ''
+        DefaultCacheBehavior:
+          TargetOriginId: site
+          ViewerProtocolPolicy: redirect-to-https
+          AllowedMethods: [GET, HEAD]
+          CachedMethods: [GET, HEAD]
+          Compress: true
+          CachePolicyId: 658327ea-f89d-4fab-a63d-7e88639e58f6 # Managed-CachingOptimized
+          ResponseHeadersPolicyId: !Ref SecurityHeadersPolicy
+          FunctionAssociations:
+            - EventType: viewer-request
+              FunctionARN: !GetAtt SpaRewriteFunction.FunctionMetadata.FunctionARN
+        # The service worker and app shell must always revalidate so phones pick up new releases.
+        CacheBehaviors:
+          - PathPattern: /sw.js
+            TargetOriginId: site
+            ViewerProtocolPolicy: redirect-to-https
+            AllowedMethods: [GET, HEAD]
+            CachedMethods: [GET, HEAD]
+            Compress: true
+            CachePolicyId: 4135ea2d-6df8-44a3-9df3-4b5a84be39ad # Managed-CachingDisabled
+            ResponseHeadersPolicyId: !Ref SecurityHeadersPolicy
+          - PathPattern: /index.html
+            TargetOriginId: site
+            ViewerProtocolPolicy: redirect-to-https
+            AllowedMethods: [GET, HEAD]
+            CachedMethods: [GET, HEAD]
+            Compress: true
+            CachePolicyId: 4135ea2d-6df8-44a3-9df3-4b5a84be39ad # Managed-CachingDisabled
+            ResponseHeadersPolicyId: !Ref SecurityHeadersPolicy
+      Tags:
+        - Key: app
+          Value: !Ref AppName
+        - Key: environment
+          Value: !Ref Environment
+
+  AliasRecordA:
+    Type: AWS::Route53::RecordSet
+    Condition: HasDns
+    Properties:
+      HostedZoneId: !Ref HostedZoneId
+      Name: !Ref DomainName
+      Type: A
+      AliasTarget:
+        DNSName: !GetAtt Distribution.DomainName
+        HostedZoneId: Z2FDTNDATAQYW2 # CloudFront's fixed hosted zone
+
+  AliasRecordAAAA:
+    Type: AWS::Route53::RecordSet
+    Condition: HasDns
+    Properties:
+      HostedZoneId: !Ref HostedZoneId
+      Name: !Ref DomainName
+      Type: AAAA
+      AliasTarget:
+        DNSName: !GetAtt Distribution.DomainName
+        HostedZoneId: Z2FDTNDATAQYW2
+
+Outputs:
+  BucketName:
+    Value: !Ref SiteBucket
+  DistributionId:
+    Value: !Ref Distribution
+  SiteUrl:
+    Value: !If
+      - HasDomain
+      - !Sub https://${DomainName}
+      - !Sub https://${Distribution.DomainName}

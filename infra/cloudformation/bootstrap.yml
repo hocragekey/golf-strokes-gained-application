@@ -1,0 +1,299 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >-
+  Golf Strokes Gained - one-time account bootstrap. GitHub Actions OIDC trust, per-environment
+  deploy roles, and the CloudFormation execution role that provisions the web stacks.
+
+Parameters:
+  GitHubOwner:
+    Type: String
+    Default: hocragekey
+  GitHubRepo:
+    Type: String
+    Default: golf-strokes-gained-application
+  AppName:
+    Type: String
+    Default: golf-sg
+    AllowedPattern: '^[a-z][a-z0-9-]{1,20}$'
+  ExistingOidcProviderArn:
+    Type: String
+    Default: ''
+    Description: >-
+      ARN of an existing token.actions.githubusercontent.com OIDC provider. An account can only
+      have one; leave blank to create it.
+
+Conditions:
+  CreateOidcProvider: !Equals [!Ref ExistingOidcProviderArn, '']
+
+Resources:
+  GitHubOidcProvider:
+    Type: AWS::IAM::OIDCProvider
+    Condition: CreateOidcProvider
+    Properties:
+      Url: https://token.actions.githubusercontent.com
+      ClientIdList:
+        - sts.amazonaws.com
+
+  # Assumed by CloudFormation itself; each deploy role can only pass its own environment's role,
+  # so a dev change set cannot touch the prod bucket.
+  DevCfnExecutionRole:
+    Type: AWS::IAM::Role
+    Metadata:
+      checkov:
+        skip:
+          - id: CKV_AWS_111
+            comment: Only CloudFormation can assume it; S3 is scoped to this environment's bucket and CloudFront to this account.
+    Properties:
+      RoleName: !Sub ${AppName}-cfn-execution-dev
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: cloudformation.amazonaws.com
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                aws:SourceAccount: !Ref AWS::AccountId
+      ManagedPolicyArns:
+        - !Ref CfnSharedPolicy
+      Policies:
+        - PolicyName: site-bucket
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Sid: SiteBucket
+                Effect: Allow
+                Action: s3:*
+                Resource:
+                  - !Sub arn:${AWS::Partition}:s3:::${AppName}-web-dev-*
+
+  ProdCfnExecutionRole:
+    Type: AWS::IAM::Role
+    Metadata:
+      checkov:
+        skip:
+          - id: CKV_AWS_111
+            comment: Only CloudFormation can assume it; S3 is scoped to this environment's bucket and CloudFront to this account.
+    Properties:
+      RoleName: !Sub ${AppName}-cfn-execution-prod
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: cloudformation.amazonaws.com
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                aws:SourceAccount: !Ref AWS::AccountId
+      ManagedPolicyArns:
+        - !Ref CfnSharedPolicy
+      Policies:
+        - PolicyName: site-bucket
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Sid: SiteBucket
+                Effect: Allow
+                Action: s3:*
+                Resource:
+                  - !Sub arn:${AWS::Partition}:s3:::${AppName}-web-prod-*
+
+  CfnSharedPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      ManagedPolicyName: !Sub ${AppName}-cfn-execution-shared
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: CloudFront
+            Effect: Allow
+            Action:
+              - cloudfront:*Distribution*
+              - cloudfront:*OriginAccessControl*
+              - cloudfront:*ResponseHeadersPolicy*
+              - cloudfront:*Function*
+              - cloudfront:TagResource
+              - cloudfront:UntagResource
+              - cloudfront:ListTagsForResource
+            Resource:
+              - !Sub arn:${AWS::Partition}:cloudfront::${AWS::AccountId}:distribution/*
+              - !Sub arn:${AWS::Partition}:cloudfront::${AWS::AccountId}:origin-access-control/*
+              - !Sub arn:${AWS::Partition}:cloudfront::${AWS::AccountId}:response-headers-policy/*
+              - !Sub arn:${AWS::Partition}:cloudfront::${AWS::AccountId}:function/*
+          - Sid: Dns
+            Effect: Allow
+            Action:
+              - route53:ChangeResourceRecordSets
+              - route53:GetChange
+              - route53:GetHostedZone
+              - route53:ListResourceRecordSets
+            Resource:
+              - !Sub arn:${AWS::Partition}:route53:::hostedzone/*
+              - !Sub arn:${AWS::Partition}:route53:::change/*
+          - Sid: Certificates
+            Effect: Allow
+            Action:
+              - acm:DescribeCertificate
+              - acm:ListCertificates
+            Resource: '*'
+
+  DevDeployRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub ${AppName}-deploy-dev
+      MaxSessionDuration: 3600
+      AssumeRolePolicyDocument: !Sub
+        - |
+          {
+            "Version": "2012-10-17",
+            "Statement": [{
+              "Effect": "Allow",
+              "Principal": { "Federated": "${Provider}" },
+              "Action": "sts:AssumeRoleWithWebIdentity",
+              "Condition": {
+                "StringEquals": {
+                  "token.actions.githubusercontent.com:aud": "sts.amazonaws.com",
+                  "token.actions.githubusercontent.com:sub": "repo:${GitHubOwner}/${GitHubRepo}:environment:dev"
+                }
+              }
+            }]
+          }
+        - Provider: !If [CreateOidcProvider, !Ref GitHubOidcProvider, !Ref ExistingOidcProviderArn]
+      ManagedPolicyArns:
+        - !Ref DevDeployPolicy
+
+  ProdDeployRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub ${AppName}-deploy-prod
+      MaxSessionDuration: 3600
+      AssumeRolePolicyDocument: !Sub
+        - |
+          {
+            "Version": "2012-10-17",
+            "Statement": [{
+              "Effect": "Allow",
+              "Principal": { "Federated": "${Provider}" },
+              "Action": "sts:AssumeRoleWithWebIdentity",
+              "Condition": {
+                "StringEquals": {
+                  "token.actions.githubusercontent.com:aud": "sts.amazonaws.com",
+                  "token.actions.githubusercontent.com:sub": "repo:${GitHubOwner}/${GitHubRepo}:environment:prod"
+                }
+              }
+            }]
+          }
+        - Provider: !If [CreateOidcProvider, !Ref GitHubOidcProvider, !Ref ExistingOidcProviderArn]
+      ManagedPolicyArns:
+        - !Ref ProdDeployPolicy
+
+  DevDeployPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      ManagedPolicyName: !Sub ${AppName}-deploy-dev
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: WebStack
+            Effect: Allow
+            Action:
+              - cloudformation:CreateChangeSet
+              - cloudformation:DeleteChangeSet
+              - cloudformation:DescribeChangeSet
+              - cloudformation:ExecuteChangeSet
+              - cloudformation:DescribeStacks
+              - cloudformation:DescribeStackEvents
+              - cloudformation:GetTemplateSummary
+            Resource:
+              - !Sub arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/${AppName}-web-dev/*
+              - !Sub arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:changeSet/*
+          - Sid: TemplateValidation
+            Effect: Allow
+            Action: cloudformation:ValidateTemplate
+            Resource: '*'
+          - Sid: PassExecutionRole
+            Effect: Allow
+            Action: iam:PassRole
+            Resource: !GetAtt DevCfnExecutionRole.Arn
+            Condition:
+              StringEquals:
+                iam:PassedToService: cloudformation.amazonaws.com
+          - Sid: UploadSite
+            Effect: Allow
+            Action:
+              - s3:ListBucket
+              - s3:GetObject
+              - s3:PutObject
+              - s3:DeleteObject
+            Resource:
+              - !Sub arn:${AWS::Partition}:s3:::${AppName}-web-dev-*
+              - !Sub arn:${AWS::Partition}:s3:::${AppName}-web-dev-*/*
+          - Sid: Invalidate
+            Effect: Allow
+            Action:
+              - cloudfront:CreateInvalidation
+              - cloudfront:GetInvalidation
+            Resource: !Sub arn:${AWS::Partition}:cloudfront::${AWS::AccountId}:distribution/*
+
+  ProdDeployPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      ManagedPolicyName: !Sub ${AppName}-deploy-prod
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: WebStack
+            Effect: Allow
+            Action:
+              - cloudformation:CreateChangeSet
+              - cloudformation:DeleteChangeSet
+              - cloudformation:DescribeChangeSet
+              - cloudformation:ExecuteChangeSet
+              - cloudformation:DescribeStacks
+              - cloudformation:DescribeStackEvents
+              - cloudformation:GetTemplateSummary
+            Resource:
+              - !Sub arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/${AppName}-web-prod/*
+              - !Sub arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:changeSet/*
+          - Sid: TemplateValidation
+            Effect: Allow
+            Action: cloudformation:ValidateTemplate
+            Resource: '*'
+          - Sid: PassExecutionRole
+            Effect: Allow
+            Action: iam:PassRole
+            Resource: !GetAtt ProdCfnExecutionRole.Arn
+            Condition:
+              StringEquals:
+                iam:PassedToService: cloudformation.amazonaws.com
+          - Sid: UploadSite
+            Effect: Allow
+            Action:
+              - s3:ListBucket
+              - s3:GetObject
+              - s3:PutObject
+              - s3:DeleteObject
+            Resource:
+              - !Sub arn:${AWS::Partition}:s3:::${AppName}-web-prod-*
+              - !Sub arn:${AWS::Partition}:s3:::${AppName}-web-prod-*/*
+          - Sid: Invalidate
+            Effect: Allow
+            Action:
+              - cloudfront:CreateInvalidation
+              - cloudfront:GetInvalidation
+            Resource: !Sub arn:${AWS::Partition}:cloudfront::${AWS::AccountId}:distribution/*
+
+Outputs:
+  DevCfnExecutionRoleArn:
+    Description: GitHub environment variable AWS_CFN_EXECUTION_ROLE_ARN for the dev environment
+    Value: !GetAtt DevCfnExecutionRole.Arn
+  ProdCfnExecutionRoleArn:
+    Description: GitHub environment variable AWS_CFN_EXECUTION_ROLE_ARN for the prod environment
+    Value: !GetAtt ProdCfnExecutionRole.Arn
+  DevDeployRoleArn:
+    Description: GitHub environment variable AWS_DEPLOY_ROLE_ARN for the dev environment
+    Value: !GetAtt DevDeployRole.Arn
+  ProdDeployRoleArn:
+    Description: GitHub environment variable AWS_DEPLOY_ROLE_ARN for the prod environment
+    Value: !GetAtt ProdDeployRole.Arn

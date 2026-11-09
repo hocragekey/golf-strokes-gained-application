@@ -94,11 +94,27 @@ jobs:
           docker logs app
           exit 1
 
+  infra:
+    name: Infrastructure lint (cfn-lint + checkov)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install linters
+        run: |
+          python3 -m venv "$RUNNER_TEMP/venv"
+          "$RUNNER_TEMP/venv/bin/pip" install --quiet cfn-lint==1.60.0 checkov==3.4.3
+          echo "$RUNNER_TEMP/venv/bin" >> "$GITHUB_PATH"
+      - run: cfn-lint infra/cloudformation/*.yml
+      - run: checkov -d infra/cloudformation --framework cloudformation --compact --quiet
+
   # Single required status check for rulesets, so job names can change freely.
   ci-ok:
     name: CI OK
     if: always()
-    needs: [verify, e2e, docker]
+    needs: [verify, e2e, docker, infra]
     runs-on: ubuntu-latest
     steps:
       - name: All required jobs passed
