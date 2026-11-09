@@ -775,8 +775,8 @@
               <div class="icon">🔒</div>
               <h3>Private by default</h3>
               <p class="muted">
-                No account and no tracking. Rounds are stored on your device; export a JSON backup
-                whenever you like.
+                No tracking, and an account is optional. Rounds are stored on your device; sign in
+                with Google to keep them across devices, or download your data any time.
               </p>
             </div>
             <div class="card feature">
@@ -814,7 +814,7 @@
               <div class="tag">Phase 2</div>
               <h3>Accounts &amp; sync</h3>
               <ul>
-                <li>Sign-in, passkeys</li>
+                <li>Google sign-in</li>
                 <li>Local-first sync</li>
                 <li>Handicap baselines</li>
                 <li>Drill library</li>
@@ -856,7 +856,7 @@
               <ul>
                 <li>Unlimited rounds on one device</li>
                 <li>Full strokes-gained analysis</li>
-                <li>JSON backup</li>
+                <li>Download your data (JSON)</li>
               </ul>
             </div>
             <div class="card tier featured">
@@ -917,7 +917,7 @@
               <div class="lane-title">Device: browser or installed web app (works offline)</div>
               <div class="flow">
                 <div class="node">
-                  <b>React UI</b>Pages: dashboard, rounds, entry, courses, card guide, backup
+                  <b>React UI</b>Pages: dashboard, rounds, entry, card guide, account, my data
                 </div>
                 <div class="arrow">→</div>
                 <div class="node">
@@ -1009,7 +1009,9 @@
             <div class="card">
               <h3>Security posture</h3>
               <ul class="checks">
-                <li>No accounts or user data on servers (Phase 1)</li>
+                <li>
+                  Signed out, nothing leaves the device; signed in, data is scoped to your Google ID
+                </li>
                 <li>Strict CSP, HSTS, frame-ancestors none</li>
                 <li>Private S3 behind CloudFront OAC</li>
                 <li>GitHub OIDC, per-environment roles</li>
@@ -1079,11 +1081,12 @@
               </div>
               <div class="arrow">⇄</div>
               <div class="node hl">
-                <b>Sync API</b>Authenticated (OIDC), per-user data, OpenAPI from the shared schemas
+                <b>Sync API</b>API Gateway checks the Google ID token; Lambda stores per-user data,
+                validated by the shared schemas
               </div>
               <div class="arrow">→</div>
               <div class="node">
-                <b>Managed database</b>Serverless compute; data scoped to each user
+                <b>DynamoDB</b>One partition per Google account; last-writer-wins with tombstones
               </div>
               <div class="arrow">·</div>
               <div class="node">
