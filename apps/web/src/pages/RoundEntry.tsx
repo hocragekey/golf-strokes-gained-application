@@ -1,15 +1,29 @@
 import {
   APPROACH_LIES,
+  holeEntrySchema,
   MISS_DIRECTIONS,
+  parseHoleNotation,
   SHORT_GAME_LIES,
   TEE_RESULTS,
-  type Course,
+  type CourseHole,
   type RoundDetail,
 } from '@golf-sg/shared';
-import { useState, type SubmitEvent } from 'react';
+import { useState, type ReactNode } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import { useCourses, useRound, useSaveRound } from '../data/hooks';
-import { draftFromEntry, emptyDraft, validateCard, type HoleDraft } from '../components/scorecard';
+import {
+  draftFromEntry,
+  emptyDraft,
+  emptyLayout,
+  isBlank,
+  layoutFromHole,
+  parseLayout,
+  validateCard,
+  validateRow,
+  type HoleDraft,
+  type LayoutDraft,
+} from '../components/scorecard';
+import { formatToPar } from '../format';
 
 const LABELS: Record<string, string> = {
   fairway: 'Fairway',
@@ -17,67 +31,303 @@ const LABELS: Record<string, string> = {
   right: 'Right',
   short: 'Short',
   long: 'Long',
-  penalty: 'Penalty/OB',
+  penalty: 'Penalty / OB',
   rough: 'Rough',
   sand: 'Bunker',
-  recovery: 'Trees/recovery',
+  recovery: 'Trees / recovery',
   fringe: 'Fringe',
-  tee: 'Tee',
+};
+const label = (value: string): string => LABELS[value] ?? value;
+
+const SCORE_NAMES: Record<number, string> = {
+  [-3]: 'Albatross',
+  [-2]: 'Eagle',
+  [-1]: 'Birdie',
+  0: 'Par',
+  1: 'Bogey',
+  2: 'Double',
+  3: 'Triple',
 };
 
-const label = (value: string): string => LABELS[value] ?? value;
 const today = (): string => {
   const d = new Date();
   return `${String(d.getFullYear())}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 };
 
-function Options({ values, blank }: { values: readonly string[]; blank?: string }) {
+type Step =
+  'layout' | 'score' | 'tee' | 'approach' | 'green' | 'short' | 'putts' | 'penalties' | 'review';
+
+/** The questions asked for a hole, in order; par 3s skip the drive and approach distance. */
+const stepsFor = (par: number): Step[] =>
+  par === 3
+    ? ['layout', 'score', 'green', 'short', 'putts', 'penalties', 'review']
+    : ['layout', 'score', 'tee', 'approach', 'green', 'short', 'putts', 'penalties', 'review'];
+
+const FIELD_STEP: Record<string, Step> = {
+  par: 'layout',
+  yardage: 'layout',
+  score: 'score',
+  teeResult: 'tee',
+  approachYards: 'approach',
+  approachLie: 'approach',
+  gir: 'green',
+  missDirection: 'green',
+  shortGameShots: 'short',
+  shortGameYards: 'short',
+  shortGameLie: 'short',
+  firstPuttFeet: 'putts',
+  putts: 'putts',
+  penalties: 'penalties',
+};
+
+const range = (from: number, to: number): number[] =>
+  Array.from({ length: to - from + 1 }, (_, i) => from + i);
+
+function Choices<T extends string | number>({
+  options,
+  selected,
+  onPick,
+  render = (v) => label(String(v)),
+  hint,
+}: {
+  options: readonly T[];
+  selected: T | null;
+  onPick: (value: T) => void;
+  render?: (value: T) => ReactNode;
+  hint?: (value: T) => string | undefined;
+}) {
   return (
-    <>
-      {blank !== undefined && <option value="">{blank}</option>}
-      {values.map((v) => (
-        <option key={v} value={v}>
-          {label(v)}
-        </option>
+    <div className="choices">
+      {options.map((v) => (
+        <button
+          key={v}
+          type="button"
+          className="choice"
+          aria-pressed={selected === v}
+          onClick={() => {
+            onPick(v);
+          }}
+        >
+          <span className="choice-main">{render(v)}</span>
+          {hint?.(v) && (
+            <>
+              {' '}
+              <span className="choice-hint">{hint(v)}</span>
+            </>
+          )}
+        </button>
       ))}
-    </>
+    </div>
   );
 }
 
-function Scorecard({ courses, existing }: { courses: Course[]; existing?: RoundDetail }) {
+function NumberField({
+  name,
+  value,
+  onChange,
+  max,
+  suffix,
+  autoFocus,
+}: {
+  name: string;
+  value: string;
+  onChange: (value: string) => void;
+  max: number;
+  suffix: string;
+  autoFocus?: boolean;
+}) {
+  return (
+    <label className="field big-field">
+      <span>{name}</span>
+      <span className="with-suffix">
+        <input
+          aria-label={name}
+          type="number"
+          inputMode="numeric"
+          min={1}
+          max={max}
+          value={value}
+          autoFocus={autoFocus}
+          onChange={(e) => {
+            onChange(e.target.value);
+          }}
+        />
+        <span className="muted">{suffix}</span>
+      </span>
+    </label>
+  );
+}
+
+function Question({
+  title,
+  help,
+  children,
+}: {
+  title: string;
+  help?: ReactNode;
+  children: ReactNode;
+}) {
+  return (
+    <div className="question">
+      <h3>{title}</h3>
+      {help && <p className="muted small">{help}</p>}
+      {children}
+    </div>
+  );
+}
+
+/** One-line summary of a hole in card notation, e.g. "5 R 165r Sh 1@15s 1@4". */
+function holeLine(d: HoleDraft, par: number): string {
+  const lie: Record<string, string> = { rough: 'r', sand: 's', recovery: 't', fringe: 'f' };
+  const tee: Record<string, string> = {
+    fairway: 'F',
+    left: 'L',
+    right: 'R',
+    short: 'S',
+    penalty: 'P',
+  };
+  const miss: Record<string, string> = { left: 'L', right: 'R', long: 'Lg', short: 'Sh' };
+  const parts = [d.score];
+  if (par !== 3)
+    parts.push(tee[d.teeResult] ?? '?', `${d.approachYards || '?'}${lie[d.approachLie] ?? ''}`);
+  parts.push(d.gir ? '✓' : (miss[d.missDirection] ?? '?'));
+  if (Number(d.shortGameShots) > 0) {
+    parts.push(`${d.shortGameShots}@${d.shortGameYards || '?'}${lie[d.shortGameLie] ?? ''}`);
+  }
+  parts.push(Number(d.putts) > 0 ? `${d.putts}@${d.firstPuttFeet || '?'}` : d.putts || '?');
+  if (Number(d.penalties) > 0) parts.push(`+${d.penalties}`);
+  return parts.join(' ');
+}
+
+interface Position {
+  hole: number;
+  step: Step | 'details';
+}
+
+function Scorecard({
+  existing,
+  savedCourses,
+}: {
+  existing?: RoundDetail;
+  savedCourses: { name: string; tees: string; holes: CourseHole[] }[];
+}) {
   const navigate = useNavigate();
   const save = useSaveRound(existing?.round.id);
-  const [courseId, setCourseId] = useState(existing?.course.id ?? courses[0]?.id ?? '');
-  const [playedOn, setPlayedOn] = useState(existing?.round.playedOn ?? today());
-  const [notes, setNotes] = useState(existing?.round.notes ?? '');
-  const course = courses.find((c) => c.id === courseId);
+  const r = existing?.round;
+  const [courseName, setCourseName] = useState(r?.courseName ?? '');
+  const [tees, setTees] = useState(r?.tees ?? '');
+  const [playedOn, setPlayedOn] = useState(r?.playedOn ?? today());
+  const [notes, setNotes] = useState(r?.notes ?? '');
+  const [holeCount, setHoleCount] = useState(r && r.layout.length <= 9 ? 9 : 18);
+  const [layout, setLayout] = useState<LayoutDraft[]>(() =>
+    Array.from({ length: 18 }, (_, i) => {
+      const hole = r?.layout[i];
+      return hole ? layoutFromHole(hole) : emptyLayout();
+    }),
+  );
+  const [layoutTouched, setLayoutTouched] = useState(r !== undefined);
   const [drafts, setDrafts] = useState<HoleDraft[]>(() =>
     Array.from({ length: 18 }, (_, i) => {
-      const entry = existing?.round.holes.find((h) => h.holeNumber === i + 1);
+      const entry = r?.holes[i];
       return entry ? draftFromEntry(entry) : emptyDraft();
     }),
   );
-  const [rowErrors, setRowErrors] = useState<Record<string, string>[]>([]);
+  const [pos, setPos] = useState<Position>({ hole: 0, step: 'details' });
+  const [cardLine, setCardLine] = useState('');
+  const [lineError, setLineError] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
 
-  if (!course) return <p className="muted">Select a course.</p>;
+  const holeLayout = (i: number) => parseLayout(layout[i] ?? emptyLayout(), i + 1);
+  const draft = drafts[pos.hole] ?? emptyDraft();
+  const lay = layout[pos.hole] ?? emptyLayout();
+  const par = Number(lay.par) || 4;
+  const steps = stepsFor(par);
 
-  const update = (i: number, patch: Partial<HoleDraft>) => {
-    setDrafts((prev) => prev.map((d, j) => (j === i ? { ...d, ...patch } : d)));
+  const update = (patch: Partial<HoleDraft>) => {
+    setDrafts((prev) => prev.map((d, j) => (j === pos.hole ? { ...d, ...patch } : d)));
+  };
+  const updateLayout = (patch: Partial<LayoutDraft>) => {
+    setLayoutTouched(true);
+    setLayout((prev) => prev.map((l, j) => (j === pos.hole ? { ...l, ...patch } : l)));
   };
 
-  async function handleSubmit(event: SubmitEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!course) return;
-    const result = validateCard(drafts.slice(0, course.holes.length), course.holes);
-    setRowErrors(result.rowErrors);
+  const startHole = (hole: number) => {
+    const known = parseLayout(layout[hole] ?? emptyLayout(), hole + 1).hole !== undefined;
+    const filled = !isBlank(drafts[hole] ?? emptyDraft());
+    setCardLine('');
+    setLineError(null);
+    setPos({ hole, step: filled ? 'review' : known ? 'score' : 'layout' });
+  };
+  const goTo = (step: Step) => {
+    setPos((p) => ({ ...p, step }));
+  };
+  const advance = (fromPar = par) => {
+    setPos((p) => {
+      if (p.step === 'details') return p;
+      const s = stepsFor(fromPar);
+      return { ...p, step: s[Math.min(s.indexOf(p.step) + 1, s.length - 1)] ?? 'review' };
+    });
+  };
+  const back = () => {
+    if (pos.step === 'details') return;
+    const i = steps.indexOf(pos.step);
+    if (i > 0) goTo(steps[i - 1] ?? 'layout');
+    else if (pos.hole > 0) setPos({ hole: pos.hole - 1, step: 'review' });
+    else setPos({ hole: 0, step: 'details' });
+  };
+
+  /** Pre-fills par and yardage when the course name matches one played before. */
+  const pickCourse = (name: string, teeName = tees) => {
+    setCourseName(name);
+    if (layoutTouched) return;
+    const key = (s: string) => s.trim().toLowerCase();
+    const match =
+      savedCourses.find((c) => key(c.name) === key(name) && key(c.tees) === key(teeName)) ??
+      savedCourses.find((c) => key(c.name) === key(name));
+    if (!match) return;
+    setTees(match.tees);
+    setHoleCount(match.holes.length > 9 ? 18 : 9);
+    setLayout(
+      Array.from({ length: 18 }, (_, i) => {
+        const hole = match.holes[i];
+        return hole ? layoutFromHole(hole) : emptyLayout();
+      }),
+    );
+  };
+
+  const status = (i: number): 'done' | 'error' | 'todo' => {
+    const d = drafts[i] ?? emptyDraft();
+    if (isBlank(d)) return 'todo';
+    if (i === pos.hole && pos.step !== 'review' && pos.step !== 'details') return 'todo';
+    const { hole } = holeLayout(i);
+    return hole && validateRow(d, hole).entry ? 'done' : 'error';
+  };
+
+  const scoreLabel = (i: number): string => {
+    const score = drafts[i]?.score ?? '';
+    return score === '' ? '·' : score;
+  };
+
+  const played = drafts.slice(0, holeCount).filter((d) => !isBlank(d));
+  const totalScore = played.reduce((a, d) => a + (Number(d.score) || 0), 0);
+  const totalPar = played.reduce((a, _d, i) => a + (Number(layout[i]?.par) || 0), 0);
+
+  async function finish() {
+    const holes = Array.from({ length: holeCount }, (_, i) => holeLayout(i).hole);
+    const result = validateCard(drafts.slice(0, holeCount), holes);
     setFormError(result.error);
-    if (result.error) return;
+    if (result.error) {
+      const bad = result.rowErrors.findIndex((e) => Object.keys(e).length > 0);
+      if (bad >= 0) setPos({ hole: bad, step: 'review' });
+      return;
+    }
     try {
       const saved = await save.mutateAsync({
-        courseId: course.id,
+        courseName,
+        tees,
         playedOn,
         notes,
+        layout: holes.slice(0, result.entries.length).filter((h) => h !== undefined),
         holes: result.entries,
       });
       void navigate(`/rounds/${saved.round.id}`);
@@ -86,220 +336,536 @@ function Scorecard({ courses, existing }: { courses: Course[]; existing?: RoundD
     }
   }
 
-  const totals = drafts
-    .slice(0, course.holes.length)
-    .reduce((a, d) => a + (Number(d.score) || 0), 0);
+  const applyLine = () => {
+    const parsed = parseHoleNotation(cardLine, par);
+    if (!parsed.ok) {
+      setLineError(parsed.error);
+      return;
+    }
+    const entry = holeEntrySchema.safeParse({ holeNumber: pos.hole + 1, ...parsed.fields });
+    if (!entry.success) {
+      setLineError('One of those numbers is out of range');
+      return;
+    }
+    update(draftFromEntry(entry.data));
+    setLineError(null);
+    setCardLine('');
+    goTo('review');
+  };
 
-  return (
-    <form className="stack" onSubmit={(e) => void handleSubmit(e)} noValidate>
-      <section className="card">
-        <div className="row">
-          <label className="field">
-            <span>Course</span>
-            <select
-              value={courseId}
-              disabled={existing !== undefined}
-              onChange={(e) => {
-                setCourseId(e.target.value);
-              }}
-            >
-              {courses.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                  {c.tees ? ` (${c.tees})` : ''}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="field">
-            <span>Date played</span>
-            <input
-              type="date"
-              value={playedOn}
-              onChange={(e) => {
-                setPlayedOn(e.target.value);
-              }}
+  const n = pos.hole + 1;
+  const next = () => {
+    advance();
+  };
+
+  let body: ReactNode;
+  switch (pos.step) {
+    case 'details':
+      body = (
+        <div className="question">
+          <h3>{existing ? 'Round details' : 'New round'}</h3>
+          <p className="muted small">
+            No setup needed: we&apos;ll ask for each hole&apos;s par and yardage as you go. Name the
+            course if you want it remembered for next time.
+          </p>
+          <div className="row">
+            <label className="field grow">
+              <span>Course (optional)</span>
+              <input
+                aria-label="Course (optional)"
+                list="saved-courses"
+                value={courseName}
+                placeholder="e.g. Pebble Creek"
+                onChange={(e) => {
+                  pickCourse(e.target.value);
+                }}
+              />
+              <datalist id="saved-courses">
+                {savedCourses.map((c) => (
+                  <option key={`${c.name}-${c.tees}`} value={c.name}>
+                    {c.tees}
+                  </option>
+                ))}
+              </datalist>
+            </label>
+            <label className="field">
+              <span>Tees</span>
+              <input
+                value={tees}
+                placeholder="White"
+                onChange={(e) => {
+                  setTees(e.target.value);
+                  if (courseName) pickCourse(courseName, e.target.value);
+                }}
+              />
+            </label>
+            <label className="field">
+              <span>Date played</span>
+              <input
+                type="date"
+                value={playedOn}
+                onChange={(e) => {
+                  setPlayedOn(e.target.value);
+                }}
+              />
+            </label>
+          </div>
+          <fieldset className="field">
+            <legend>Holes</legend>
+            <Choices
+              options={[18, 9]}
+              selected={holeCount}
+              render={(v) => `${String(v)} holes`}
+              onPick={setHoleCount}
             />
-          </label>
-          <label className="field grow">
+          </fieldset>
+          <label className="field">
             <span>Notes</span>
             <input
               value={notes}
+              placeholder="Windy, new driver…"
               onChange={(e) => {
                 setNotes(e.target.value);
               }}
-              placeholder="Windy, new driver…"
             />
           </label>
+          <div className="actions">
+            <button
+              type="button"
+              className="primary big"
+              onClick={() => {
+                startHole(0);
+              }}
+            >
+              {existing ? 'Review holes' : 'Start with hole 1'}
+            </button>
+          </div>
         </div>
-        <p className="muted small">
-          Fill holes in order; leave trailing holes blank for a partial round. Not sure what a field
-          means? See the <Link to="/guide">card guide</Link>.
-        </p>
-      </section>
-      <section className="card">
-        <div className="table-scroll">
-          <table className="table scorecard">
-            <thead>
-              <tr>
-                <th>Hole</th>
-                <th>Score</th>
-                <th>Tee shot</th>
-                <th>Approach yds</th>
-                <th>Approach lie</th>
-                <th>GIR</th>
-                <th>Missed</th>
-                <th>Short-game shots</th>
-                <th>SG yds</th>
-                <th>SG lie</th>
-                <th>1st putt ft</th>
-                <th>Putts</th>
-                <th>Pen</th>
-              </tr>
-            </thead>
-            <tbody>
-              {course.holes.map((hole, i) => {
-                const d = drafts[i] ?? emptyDraft();
-                const errors = rowErrors[i] ?? {};
-                const isPar3 = hole.par === 3;
-                const name = (field: string) => `Hole ${hole.number} ${field}`;
-                const cls = (field: string) => (errors[field] ? 'invalid' : undefined);
-                const num = (field: keyof HoleDraft, max: number, disabled = false) => (
-                  <input
-                    aria-label={name(field)}
-                    aria-invalid={Boolean(errors[field])}
-                    className={cls(field)}
-                    type="number"
-                    inputMode="numeric"
-                    min={0}
-                    max={max}
-                    disabled={disabled}
-                    value={String(d[field])}
-                    onChange={(e) => {
-                      update(i, { [field]: e.target.value });
+      );
+      break;
+    case 'layout': {
+      const { errors } = holeLayout(pos.hole);
+      body = (
+        <Question
+          title={`Hole ${String(n)}: par and yardage?`}
+          help="Copy them from the scorecard."
+        >
+          <fieldset className="field">
+            <legend>Par</legend>
+            <Choices
+              options={['3', '4', '5', '6']}
+              selected={lay.par}
+              render={(v) => `Par ${v}`}
+              onPick={(v) => {
+                updateLayout({ par: v });
+              }}
+            />
+          </fieldset>
+          <NumberField
+            name="Yards"
+            suffix="yds"
+            max={800}
+            value={lay.yardage}
+            onChange={(v) => {
+              updateLayout({ yardage: v });
+            }}
+          />
+          {lay.yardage !== '' && errors.yardage && <p className="field-error">{errors.yardage}</p>}
+          <div className="actions">
+            <button
+              type="button"
+              className="primary big"
+              disabled={Object.keys(errors).length > 0}
+              onClick={() => {
+                advance(Number(lay.par));
+              }}
+            >
+              Next
+            </button>
+          </div>
+        </Question>
+      );
+      break;
+    }
+    case 'score':
+      body = (
+        <Question title="What did you score?" help="Every stroke, penalties included.">
+          <Choices
+            options={range(Math.max(1, par - 2), par + 5).map(String)}
+            selected={draft.score}
+            render={(v) => v}
+            hint={(v) => SCORE_NAMES[Number(v) - par]}
+            onPick={(v) => {
+              update({ score: v });
+              next();
+            }}
+          />
+        </Question>
+      );
+      break;
+    case 'tee':
+      body = (
+        <Question title="Where did your drive finish?">
+          <Choices
+            options={TEE_RESULTS}
+            selected={draft.teeResult || null}
+            onPick={(v) => {
+              update({
+                teeResult: v,
+                penalties: v === 'penalty' && draft.penalties === '0' ? '1' : draft.penalties,
+              });
+              next();
+            }}
+          />
+        </Question>
+      );
+      break;
+    case 'approach':
+      body = (
+        <Question
+          title="How far was your shot into the green?"
+          help="Yards to the pin, and where you hit it from."
+        >
+          <NumberField
+            name="Approach yards"
+            suffix="yds"
+            max={700}
+            autoFocus
+            value={draft.approachYards}
+            onChange={(v) => {
+              update({ approachYards: v });
+            }}
+          />
+          <fieldset className="field">
+            <legend>Hit from</legend>
+            <Choices
+              options={APPROACH_LIES.filter((l) => l !== 'tee')}
+              selected={draft.approachLie}
+              onPick={(v) => {
+                update({ approachLie: v });
+              }}
+            />
+          </fieldset>
+          <div className="actions">
+            <button
+              type="button"
+              className="primary big"
+              disabled={draft.approachYards === ''}
+              onClick={next}
+            >
+              Next
+            </button>
+          </div>
+        </Question>
+      );
+      break;
+    case 'green':
+      body = (
+        <Question
+          title="Did you hit the green in regulation?"
+          help={`On the green in ${String(par - 2)} or fewer. If not, where did you miss?`}
+        >
+          <Choices
+            options={['gir', ...MISS_DIRECTIONS]}
+            selected={draft.gir ? 'gir' : draft.missDirection || null}
+            render={(v) => (v === 'gir' ? 'Yes, on the green' : `Missed ${v}`)}
+            onPick={(v) => {
+              update(
+                v === 'gir' ? { gir: true, missDirection: '' } : { gir: false, missDirection: v },
+              );
+              next();
+            }}
+          />
+        </Question>
+      );
+      break;
+    case 'short': {
+      const shots = Number(draft.shortGameShots);
+      body = (
+        <Question
+          title="How many chips, pitches or bunker shots?"
+          help="Shots from within about 50 yards that didn't start on the green."
+        >
+          <Choices
+            options={['0', '1', '2', '3', '4']}
+            selected={draft.shortGameShots}
+            render={(v) => (v === '0' ? 'None' : v)}
+            onPick={(v) => {
+              update({
+                shortGameShots: v,
+                ...(v === '0' ? { shortGameYards: '', shortGameLie: '' } : {}),
+              });
+              if (v === '0') next();
+            }}
+          />
+          {shots > 0 && (
+            <>
+              <NumberField
+                name="Short-game yards"
+                suffix="yds to the pin"
+                max={60}
+                autoFocus
+                value={draft.shortGameYards}
+                onChange={(v) => {
+                  update({ shortGameYards: v });
+                }}
+              />
+              <fieldset className="field">
+                <legend>First one from</legend>
+                <Choices
+                  options={SHORT_GAME_LIES}
+                  selected={draft.shortGameLie || 'fairway'}
+                  onPick={(v) => {
+                    update({ shortGameLie: v });
+                  }}
+                />
+              </fieldset>
+              <div className="actions">
+                <button
+                  type="button"
+                  className="primary big"
+                  disabled={draft.shortGameYards === ''}
+                  onClick={next}
+                >
+                  Next
+                </button>
+              </div>
+            </>
+          )}
+        </Question>
+      );
+      break;
+    }
+    case 'putts': {
+      const putts = Number(draft.putts);
+      body = (
+        <Question title="How many putts?">
+          <Choices
+            options={['0', '1', '2', '3', '4']}
+            selected={draft.putts}
+            render={(v) => (v === '0' ? '0 (holed out)' : v)}
+            onPick={(v) => {
+              update({ putts: v, ...(v === '0' ? { firstPuttFeet: '' } : {}) });
+              if (v === '0') next();
+            }}
+          />
+          {draft.putts !== '' && putts > 0 && (
+            <>
+              <NumberField
+                name="First putt"
+                suffix="feet"
+                max={150}
+                autoFocus
+                value={draft.firstPuttFeet}
+                onChange={(v) => {
+                  update({ firstPuttFeet: v });
+                }}
+              />
+              <div className="actions">
+                <button
+                  type="button"
+                  className="primary big"
+                  disabled={draft.firstPuttFeet === ''}
+                  onClick={next}
+                >
+                  Next
+                </button>
+              </div>
+            </>
+          )}
+        </Question>
+      );
+      break;
+    }
+    case 'penalties':
+      body = (
+        <Question title="Any penalty strokes?" help="OB, water, unplayable.">
+          <Choices
+            options={['0', '1', '2', '3']}
+            selected={draft.penalties}
+            render={(v) => (v === '0' ? 'None' : `+${v}`)}
+            onPick={(v) => {
+              update({ penalties: v });
+              next();
+            }}
+          />
+        </Question>
+      );
+      break;
+    case 'review': {
+      const { hole, errors: layoutErrors } = holeLayout(pos.hole);
+      const errors = { ...layoutErrors, ...(hole ? validateRow(draft, hole).errors : {}) };
+      const isLast = pos.hole + 1 >= holeCount;
+      body = (
+        <Question title={`Hole ${String(n)} summary`}>
+          <p className="hole-line">
+            <span className="muted small">Card line</span>
+            <code>{holeLine(draft, par)}</code>
+          </p>
+          {Object.keys(errors).length > 0 ? (
+            <ul className="field-errors" role="alert">
+              {Object.entries(errors).map(([field, message]) => (
+                <li key={field}>
+                  {message}{' '}
+                  <button
+                    type="button"
+                    className="link"
+                    onClick={() => {
+                      goTo(FIELD_STEP[field] ?? 'score');
                     }}
-                  />
-                );
-                const messages = Object.values(errors);
-                return [
-                  <tr key={hole.number}>
-                    <th scope="row">
-                      {hole.number}
-                      <div className="muted small">
-                        Par {hole.par} · {hole.yardage}
-                      </div>
-                    </th>
-                    <td>{num('score', 20)}</td>
-                    <td>
-                      {isPar3 ? (
-                        <span className="muted">—</span>
-                      ) : (
-                        <select
-                          aria-label={name('teeResult')}
-                          className={cls('teeResult')}
-                          value={d.teeResult}
-                          onChange={(e) => {
-                            update(i, { teeResult: e.target.value });
-                          }}
-                        >
-                          <Options values={TEE_RESULTS} blank="–" />
-                        </select>
-                      )}
-                    </td>
-                    <td>
-                      {isPar3 ? <span className="muted">tee</span> : num('approachYards', 700)}
-                    </td>
-                    <td>
-                      {isPar3 ? (
-                        <span className="muted">—</span>
-                      ) : (
-                        <select
-                          aria-label={name('approachLie')}
-                          value={d.approachLie}
-                          onChange={(e) => {
-                            update(i, { approachLie: e.target.value });
-                          }}
-                        >
-                          <Options values={APPROACH_LIES.filter((l) => l !== 'tee')} />
-                        </select>
-                      )}
-                    </td>
-                    <td>
-                      <input
-                        aria-label={name('gir')}
-                        type="checkbox"
-                        checked={d.gir}
-                        onChange={(e) => {
-                          update(i, { gir: e.target.checked });
-                        }}
-                      />
-                    </td>
-                    <td>
-                      <select
-                        aria-label={name('missDirection')}
-                        className={cls('missDirection')}
-                        disabled={d.gir}
-                        value={d.gir ? '' : d.missDirection}
-                        onChange={(e) => {
-                          update(i, { missDirection: e.target.value });
-                        }}
-                      >
-                        <Options values={MISS_DIRECTIONS} blank="–" />
-                      </select>
-                    </td>
-                    <td>{num('shortGameShots', 10)}</td>
-                    <td>{num('shortGameYards', 60, d.shortGameShots === '0')}</td>
-                    <td>
-                      <select
-                        aria-label={name('shortGameLie')}
-                        className={cls('shortGameLie')}
-                        disabled={d.shortGameShots === '0'}
-                        value={d.shortGameLie}
-                        onChange={(e) => {
-                          update(i, { shortGameLie: e.target.value });
-                        }}
-                      >
-                        <Options values={SHORT_GAME_LIES} blank="–" />
-                      </select>
-                    </td>
-                    <td>{num('firstPuttFeet', 150)}</td>
-                    <td>{num('putts', 10)}</td>
-                    <td>{num('penalties', 10)}</td>
-                  </tr>,
-                  messages.length > 0 && (
-                    <tr key={`${hole.number}-errors`} className="row-errors">
-                      <td colSpan={13} role="alert">
-                        Hole {hole.number}: {messages.join(' · ')}
-                      </td>
-                    </tr>
-                  ),
-                ];
-              })}
-            </tbody>
-            <tfoot>
-              <tr>
-                <th>Total</th>
-                <th>{totals || '—'}</th>
-                <td colSpan={11} />
-              </tr>
-            </tfoot>
-          </table>
-        </div>
-      </section>
-      {formError && (
-        <p className="form-error" role="alert">
-          {formError}
-        </p>
-      )}
-      <div className="actions">
-        <button type="submit" className="primary" disabled={save.isPending}>
-          {existing ? 'Save round' : 'Calculate strokes gained'}
-        </button>
-        <Link className="button" to={existing ? `/rounds/${existing.round.id}` : '/rounds'}>
-          Cancel
-        </Link>
+                  >
+                    Fix
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="ok">Looks good.</p>
+          )}
+          <div className="actions">
+            {isLast ? (
+              <button
+                type="button"
+                className="primary big"
+                disabled={save.isPending}
+                onClick={() => void finish()}
+              >
+                {existing ? 'Save round' : 'Calculate strokes gained'}
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="primary big"
+                onClick={() => {
+                  startHole(pos.hole + 1);
+                }}
+              >
+                Next hole
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => {
+                goTo('score');
+              }}
+            >
+              Edit answers
+            </button>
+          </div>
+        </Question>
+      );
+      break;
+    }
+  }
+
+  return (
+    <div className="entry">
+      <div className="entry-main">
+        {pos.step !== 'details' && (
+          <div className="hole-bar">
+            <button type="button" className="link" onClick={back}>
+              ← Back
+            </button>
+            <span className="hole-meta">
+              <strong>Hole {n}</strong>
+              {holeLayout(pos.hole).hole && (
+                <button
+                  type="button"
+                  className="link"
+                  onClick={() => {
+                    goTo('layout');
+                  }}
+                >
+                  Par {lay.par} · {lay.yardage} yds
+                </button>
+              )}
+            </span>
+            <span className="muted small">
+              {played.length > 0
+                ? `Thru ${String(played.length)} · ${String(totalScore)} (${formatToPar(totalScore - totalPar)})`
+                : ''}
+            </span>
+          </div>
+        )}
+        <section className="card question-card">{body}</section>
+        {pos.step !== 'details' && pos.step !== 'review' && (
+          <details className="card-line">
+            <summary>Type the card line instead</summary>
+            <div className="row">
+              <label className="field grow">
+                <span>Card line</span>
+                <input
+                  value={cardLine}
+                  placeholder={par === 3 ? '3 ✓ 2@25' : '5 R 165r Sh 1@15s 1@4'}
+                  onChange={(e) => {
+                    setCardLine(e.target.value);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') applyLine();
+                  }}
+                />
+              </label>
+              <button type="button" onClick={applyLine}>
+                Apply
+              </button>
+            </div>
+            {lineError && <p className="field-error">{lineError}</p>}
+            <p className="muted small">
+              Same order as the <Link to="/guide">card guide</Link>.
+            </p>
+          </details>
+        )}
+        {formError && (
+          <p className="form-error" role="alert">
+            {formError}
+          </p>
+        )}
       </div>
-    </form>
+      <aside className="card mini-card" aria-label="Scorecard">
+        <div className="card-header">
+          <h3>{courseName || 'Scorecard'}</h3>
+          <button
+            type="button"
+            className="link"
+            onClick={() => {
+              setPos({ hole: 0, step: 'details' });
+            }}
+          >
+            Details
+          </button>
+        </div>
+        <ol className="hole-strip">
+          {range(0, holeCount - 1).map((i) => (
+            <li key={i}>
+              <button
+                type="button"
+                aria-label={`Go to hole ${String(i + 1)}`}
+                aria-current={pos.step !== 'details' && pos.hole === i ? 'step' : undefined}
+                className={`hole-dot ${status(i)}`}
+                onClick={() => {
+                  startHole(i);
+                }}
+              >
+                <span className="hole-num">{i + 1}</span>
+                <span className="hole-score">{scoreLabel(i)}</span>
+              </button>
+            </li>
+          ))}
+        </ol>
+        {played.length > 0 && (
+          <button
+            type="button"
+            className="primary wide"
+            disabled={save.isPending}
+            onClick={() => void finish()}
+          >
+            {existing
+              ? 'Save round'
+              : `Finish after ${String(played.length)} hole${played.length === 1 ? '' : 's'}`}
+          </button>
+        )}
+      </aside>
+    </div>
   );
 }
 
@@ -321,16 +887,7 @@ export function RoundEntry() {
   return (
     <div className="stack">
       <h2>{id !== undefined ? 'Edit round' : 'Enter round'}</h2>
-      {courses.data.length === 0 ? (
-        <section className="card">
-          <p>
-            Add a <Link to="/courses">course</Link> first so we know the par and yardage of each
-            hole.
-          </p>
-        </section>
-      ) : (
-        <Scorecard courses={courses.data} existing={round.data} />
-      )}
+      <Scorecard existing={round.data} savedCourses={courses.data} />
     </div>
   );
 }

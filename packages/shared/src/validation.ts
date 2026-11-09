@@ -1,4 +1,4 @@
-import type { Course, CourseHole, HoleEntry } from './schemas.js';
+import type { CourseHole, HoleEntry } from './schemas.js';
 
 export interface EntryIssue {
   path: string;
@@ -70,13 +70,16 @@ export function holeEntryIssues(hole: CourseHole, entry: HoleEntry): EntryIssue[
   return issues;
 }
 
-/** Validates every hole of a round against the course it was played on. */
-export function roundIssues(holes: readonly HoleEntry[], course: Course): EntryIssue[] {
-  if (holes.length > course.holes.length) {
-    return [{ path: 'holes', message: `${course.name} only has ${course.holes.length} holes` }];
+/** Validates every hole of a round against the par and yardage recorded for it. */
+export function roundIssues(
+  holes: readonly HoleEntry[],
+  layout: readonly CourseHole[],
+): EntryIssue[] {
+  if (holes.length > layout.length) {
+    return [{ path: 'holes', message: 'Every played hole needs a par and yardage' }];
   }
   return holes.flatMap((entry, i) => {
-    const hole = course.holes[i];
+    const hole = layout[i];
     return hole
       ? holeEntryIssues(hole, entry).map((issue) => ({
           ...issue,

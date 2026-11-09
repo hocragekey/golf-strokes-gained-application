@@ -9,9 +9,14 @@ export function Rounds() {
     <section className="card">
       <div className="card-header">
         <h2>Rounds</h2>
-        <Link className="button primary" to="/rounds/new">
-          Enter round
-        </Link>
+        <span className="actions">
+          <Link className="button" to="/courses">
+            Saved courses
+          </Link>
+          <Link className="button primary" to="/rounds/new">
+            Enter round
+          </Link>
+        </span>
       </div>
       {rounds.isPending && <p className="muted">Loading…</p>}
       {rounds.isError && (
@@ -42,7 +47,7 @@ export function Rounds() {
                     <Link to={`/rounds/${r.id}`}>{r.playedOn}</Link>
                   </td>
                   <td>
-                    {r.courseName}
+                    {r.courseName || <span className="muted">Unnamed course</span>}
                     {r.holesPlayed !== 18 && (
                       <span className="muted small"> ({r.holesPlayed} holes)</span>
                     )}

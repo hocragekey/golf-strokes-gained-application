@@ -19,10 +19,9 @@ const scrambledPar5 = entry({
   putts: 2,
 });
 
-const rounds = [1, 2, 3].map((id) => ({
-  round: round(`r${id}`, `2026-0${id}-01`, [regulationPar4, threePuttPar3, scrambledPar5]),
-  course,
-}));
+const rounds = [1, 2, 3].map((id) =>
+  round(`r${id}`, `2026-0${id}-01`, [regulationPar4, threePuttPar3, scrambledPar5]),
+);
 
 describe('summarizeRound', () => {
   it('totals score, par and strokes gained', () => {
