@@ -214,4 +214,15 @@ describe('LocalStore', () => {
     round.layout[0].number = 2;
     await expect(store.importBackup(backup)).rejects.toThrow(/invalid/);
   });
+
+  it('keeps unplayed holes of a partial saved course and lets it be edited', async () => {
+    const store = createTestStore();
+    await store.saveRound(roundInput([par4, par3ThreePutt]));
+    await store.saveRound(roundInput([par4]));
+    const [course] = await store.listCourses();
+    expect(course?.holes).toHaveLength(2);
+    if (!course) throw new Error('expected a course');
+    const edited = await store.saveCourse({ ...course, name: 'Pebble Creek GC' }, course.id);
+    expect(edited.holes).toHaveLength(2);
+  });
 });

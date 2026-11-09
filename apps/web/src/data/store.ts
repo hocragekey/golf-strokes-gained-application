@@ -65,8 +65,7 @@ const isComplete = (r: Round): boolean => r.layout.length === r.holes.length;
 
 /** Keeps holes the round didn't play (e.g. the back nine) from the previously saved layout. */
 function mergeLayout(saved: readonly CourseHole[], played: readonly CourseHole[]): CourseHole[] {
-  const holes = [...played, ...saved.slice(played.length)];
-  return holes.length === 9 || holes.length === 18 ? holes : [...played];
+  return [...played, ...saved.slice(played.length)];
 }
 
 /**

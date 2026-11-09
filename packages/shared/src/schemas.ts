@@ -25,9 +25,8 @@ export const courseInputSchema = z
   .object({
     name: z.string().trim().min(1, 'Name is required').max(100),
     tees: z.string().trim().max(40).default(''),
-    holes: z.array(courseHoleSchema).refine((h) => h.length === 9 || h.length === 18, {
-      message: 'A course must have 9 or 18 holes',
-    }),
+    // Saved courses are pre-fill shortcuts, so a partial layout from a short round is fine.
+    holes: z.array(courseHoleSchema).min(1, 'A course needs at least one hole').max(18),
   })
   .refine((c) => c.holes.every((h, i) => h.number === i + 1), {
     message: 'Holes must be numbered consecutively from 1',
