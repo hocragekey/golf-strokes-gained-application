@@ -82,6 +82,7 @@ pnpm test:e2e       # Playwright (run `pnpm build` first)
 
 - [Engineering standards](docs/engineering-standards.md): branching, commits, CI/CD, releases
 - [Deploying to AWS](docs/deploy-aws.md): S3 + CloudFront, dev and prod environments
+- [Marketing and architecture page](site/index.html): published to GitHub Pages by `pages.yml`
 - [Contributing](CONTRIBUTING.md) · [Security policy](SECURITY.md)
 - [ADRs](docs/adr), especially [local-first PWA](docs/adr/0003-local-first-pwa.md),
   [strokes-gained model](docs/adr/0004-strokes-gained-model.md) and
