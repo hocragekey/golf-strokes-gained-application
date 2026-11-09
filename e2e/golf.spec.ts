@@ -66,4 +66,6 @@ test('prints the card guide', async ({ page }) => {
   await page.goto('/guide');
   await expect(page.getByRole('heading', { name: 'What to mark on your card' })).toBeVisible();
   await expect(page.getByRole('cell', { name: '1st putt' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Pocket stat sheet' })).toBeVisible();
+  await expect(page.getByRole('img', { name: 'QR code linking to the card guide' })).toBeVisible();
 });

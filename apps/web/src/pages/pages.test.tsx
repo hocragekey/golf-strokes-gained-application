@@ -44,6 +44,16 @@ describe('Dashboard', () => {
     expect(screen.getByLabelText('Range')).toHaveValue('0');
   });
 
+  it('switches the comparison baseline', async () => {
+    const { store } = await seeded();
+    renderWithProviders(<Dashboard />, { store });
+    expect(await screen.findByText(/vs PGA Tour baseline/)).toBeInTheDocument();
+    await userEvent.selectOptions(screen.getByLabelText('Compare against'), 'scratch');
+    expect(await screen.findByText(/vs Scratch \(est\.\) baseline/)).toBeInTheDocument();
+    expect(localStorage.getItem('golf-sg.baseline')).toBe('scratch');
+    localStorage.clear();
+  });
+
   it('shows errors', async () => {
     const store = createTestStore();
     vi.spyOn(store, 'getStats').mockRejectedValue(new Error('storage unavailable'));
@@ -219,6 +229,11 @@ describe('App shell', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Print' }));
     expect(print).toHaveBeenCalled();
     expect(screen.getByText('1st putt')).toBeInTheDocument();
+    expect(screen.getByText('5 R 165r Sh 1@15s 1@4')).toBeInTheDocument();
+    expect(
+      screen.getByRole('img', { name: 'QR code linking to the card guide' }),
+    ).toBeInTheDocument();
+    expect(screen.getAllByRole('row')).toHaveLength(7 + 1 + 3 + 18 + 1);
   });
 
   it('shows not found and the offline badge', async () => {

@@ -73,7 +73,9 @@ export function draftToInput(d: HoleDraft, hole: CourseHole): HoleEntryInput {
     missDirection: d.gir ? null : (opt(d.missDirection) as HoleEntryInput['missDirection']),
     shortGameShots: num(d.shortGameShots) ?? 0,
     shortGameYards: num(d.shortGameYards),
-    shortGameLie: opt(d.shortGameLie) as HoleEntryInput['shortGameLie'],
+    // Card notation: no lie letter means the first short-game shot was from the fairway.
+    shortGameLie: (opt(d.shortGameLie) ??
+      ((num(d.shortGameShots) ?? 0) > 0 ? 'fairway' : null)) as HoleEntryInput['shortGameLie'],
     firstPuttFeet: num(d.firstPuttFeet),
     putts: num(d.putts) ?? Number.NaN,
     penalties: num(d.penalties) ?? 0,

@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { interpolate, pgaTourBaseline, type BaselineLie } from './baseline.js';
+import {
+  DEFAULT_BASELINE,
+  getBaseline,
+  interpolate,
+  pgaTourBaseline,
+  scratchBaseline,
+  type BaselineLie,
+} from './baseline.js';
 
 const E = pgaTourBaseline.expectedStrokes;
 
@@ -67,4 +74,36 @@ describe('pgaTourBaseline', () => {
       expect(E(250, lie)).toBeLessThan(5);
     },
   );
+});
+
+describe('scratchBaseline', () => {
+  const S = scratchBaseline.expectedStrokes;
+  const lies: BaselineLie[] = ['tee', 'fairway', 'rough', 'sand', 'recovery', 'green'];
+
+  it('is never easier than the Tour and leaves holed balls at zero', () => {
+    for (const lie of lies) {
+      for (const d of [1, 3, 10, 30, 100, 200, 400])
+        expect(S(d, lie)).toBeGreaterThanOrEqual(E(d, lie));
+      expect(S(0, lie)).toBe(0);
+    }
+    expect(S(1, 'green')).toBe(1);
+  });
+
+  it('is about 3 strokes per 18 weaker than the Tour on a par-72 course', () => {
+    const tees = [
+      400, 420, 180, 540, 380, 440, 160, 520, 410, 390, 430, 200, 560, 370, 450, 170, 510, 420,
+    ];
+    const gap = tees.reduce((acc, d) => acc + S(d, 'tee') - E(d, 'tee'), 0);
+    expect(gap).toBeGreaterThan(2);
+    expect(gap).toBeLessThan(4);
+  });
+});
+
+describe('getBaseline', () => {
+  it('resolves known ids and falls back to the default', () => {
+    expect(getBaseline('scratch')).toBe(scratchBaseline);
+    expect(getBaseline('nope')).toBe(DEFAULT_BASELINE);
+    expect(getBaseline(undefined)).toBe(DEFAULT_BASELINE);
+    expect(getBaseline('toString')).toBe(DEFAULT_BASELINE);
+  });
 });

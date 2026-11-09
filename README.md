@@ -13,18 +13,32 @@ browser menu.
 
 ## What to mark on each hole
 
-| Mark               | Meaning                                                                  |
-| ------------------ | ------------------------------------------------------------------------ |
-| Score              | Strokes on the hole, including penalties                                 |
-| Tee (par 4/5)      | F fairway, L left, R right, S short, P penalty/OB                        |
-| Approach yds + lie | Yards to the pin for the shot into the green; R rough, B bunker, T trees |
-| GIR                | On the green in regulation?                                              |
-| Miss               | If not: L, R, Long or Short                                              |
-| Short-game shots   | Non-putt shots from inside ~50 yds; yards and lie of the first one       |
-| 1st putt ft        | Distance of the first putt (pace it off)                                 |
-| Putts, Penalties   | Counts                                                                   |
+Write one short line per hole, in this order, on any scorecard (score in the normal box, the rest
+in a spare row or the margin) or on the printable pocket sheet:
 
-Par and yardage are entered once per course. The in-app **Card guide** page is printable.
+```text
+Score · Tee · Approach · Green · Short game · Putts · Penalties
+5       R     165r       Sh      1@15s        1@4
+```
+
+| Field      | Write                                                                     |
+| ---------- | ------------------------------------------------------------------------- |
+| Score      | Strokes on the hole, penalties included                                   |
+| Tee        | Par 4/5 only: F fairway, L left, R right, S short, P penalty/OB           |
+| Approach   | Par 4/5: yards to the pin + lie if not fairway (r rough, s sand, t trees) |
+| Green      | ✓ green in regulation, else the miss: L, R, Lg long, Sh short             |
+| Short game | Only if any: shots inside ~50 yds @ yards of the first + lie (f, r, s)    |
+| Putts      | Putts @ feet of the first putt                                            |
+| Penalties  | Only if any: `+1`                                                         |
+
+Par and yardage are entered once per course. The in-app **Card guide** has worked examples and a
+printable pocket sheet with a QR code back to the guide.
+
+## Product and design docs
+
+- [Product requirements (PRD)](docs/prd.md): goals, requirements with IDs, roadmap, monetization
+- [Technical design](docs/technical-design.md): architecture, data model, SG engine, traceability
+- [AWS deployment runbook](docs/deploy-aws.md) and [ADRs](docs/adr)
 
 ## Quick start
 
