@@ -33,6 +33,13 @@ fi
 
 log "Deploying $STACK"
 overrides=("GitHubOwner=${REPO%%/*}" "GitHubRepo=${REPO##*/}")
+# Deploy roles trust the exact OIDC subject GitHub issues for this repo (see docs/deploy-aws.md).
+if [[ "$(gh api "repos/$REPO/actions/oidc/customization/sub" --jq .use_immutable_subject 2>/dev/null)" == true ]]; then
+  ids="$(gh api "repos/$REPO" --jq '"\(.owner.id) \(.id)"')"
+  overrides+=("GitHubOwnerId=${ids% *}" "GitHubRepoId=${ids#* }")
+else
+  overrides+=("GitHubOwnerId=" "GitHubRepoId=")
+fi
 existing="$(aws iam list-open-id-connect-providers --output text \
   --query "OpenIDConnectProviderList[?ends_with(Arn, '/token.actions.githubusercontent.com')].Arn | [0]")"
 # Reuse the account's GitHub OIDC provider unless this stack created it.
