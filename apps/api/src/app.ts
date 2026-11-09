@@ -4,22 +4,11 @@ import type { ApiError } from '@golf-sg/shared';
 import helmet from '@fastify/helmet';
 import fastifyStatic from '@fastify/static';
 import Fastify, { type FastifyInstance, type FastifyServerOptions } from 'fastify';
-import type { Db } from './db/client.js';
-import { HttpError } from './errors.js';
-import { Repository } from './repository.js';
-import { courseRoutes } from './routes/courses.js';
 import { healthRoutes } from './routes/health.js';
-import { roundRoutes } from './routes/rounds.js';
 
 export interface BuildAppOptions {
-  db: Db;
   logger?: FastifyServerOptions['logger'];
   webDistDir?: string | undefined;
-}
-
-export interface App {
-  server: FastifyInstance;
-  repo: Repository;
 }
 
 const statusOf = (err: unknown): number =>
@@ -30,22 +19,20 @@ const statusOf = (err: unknown): number =>
     ? err.statusCode
     : 500;
 
-export async function buildApp(opts: BuildAppOptions): Promise<App> {
+/**
+ * Static host for the PWA plus health checks. Course/round data endpoints were removed until
+ * authenticated sync exists (PRD Phase 2); all user data stays on the device.
+ */
+export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInstance> {
   const server = Fastify({
     logger: opts.logger ?? false,
     requestIdHeader: 'x-request-id',
     bodyLimit: 256 * 1024,
   });
-  const repo = new Repository(opts.db);
 
   await server.register(helmet);
 
   server.setErrorHandler((err, req, reply) => {
-    if (err instanceof HttpError) {
-      const body: ApiError = { error: err.code, message: err.message };
-      if (err.issues) body.issues = err.issues;
-      return reply.code(err.statusCode).send(body);
-    }
     const statusCode = statusOf(err);
     if (statusCode >= 500) req.log.error({ err }, 'unhandled error');
     const message = statusCode >= 500 ? 'Internal Server Error' : (err as Error).message;
@@ -54,9 +41,7 @@ export async function buildApp(opts: BuildAppOptions): Promise<App> {
 
   await server.register(
     async (api) => {
-      await api.register(healthRoutes, { repo });
-      await api.register(courseRoutes, { repo });
-      await api.register(roundRoutes, { repo });
+      await api.register(healthRoutes);
       api.setNotFoundHandler((_req, reply) =>
         reply.code(404).send({ error: 'NotFound', message: 'Route not found' } satisfies ApiError),
       );
@@ -72,8 +57,8 @@ export async function buildApp(opts: BuildAppOptions): Promise<App> {
       return reply.code(404).send({ error: 'NotFound', message: 'Route not found' });
     });
   } else if (webRoot) {
-    server.log.warn({ webRoot }, 'web assets not found; serving API only');
+    server.log.warn({ webRoot }, 'web assets not found; serving health checks only');
   }
 
-  return { server, repo };
+  return server;
 }

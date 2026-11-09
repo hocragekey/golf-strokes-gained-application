@@ -1,11 +1,8 @@
 import { buildApp } from './app.js';
 import { loadConfig } from './config.js';
-import { openDatabase } from './db/client.js';
 
 const config = loadConfig();
-const database = openDatabase(config.DATABASE_PATH);
-const { server } = await buildApp({
-  db: database.db,
+const server = await buildApp({
   logger: { level: config.LOG_LEVEL },
   webDistDir: config.WEB_DIST_DIR,
 });
@@ -17,7 +14,6 @@ async function shutdown(signal: string): Promise<void> {
   server.log.info({ signal }, 'shutting down');
   try {
     await server.close();
-    database.close();
     process.exit(0);
   } catch (err) {
     server.log.error({ err }, 'error during shutdown');
