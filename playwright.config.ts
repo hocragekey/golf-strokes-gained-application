@@ -1,11 +1,7 @@
-import { mkdtempSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
 import { defineConfig, devices } from '@playwright/test';
 
 const PORT = Number(process.env.E2E_PORT ?? 4173);
 const baseURL = process.env.E2E_BASE_URL ?? `http://127.0.0.1:${PORT}`;
-const dataDir = mkdtempSync(join(tmpdir(), 'golf-sg-e2e-'));
 
 export default defineConfig({
   testDir: './e2e',
@@ -33,7 +29,6 @@ export default defineConfig({
           PORT: String(PORT),
           HOST: '127.0.0.1',
           LOG_LEVEL: 'warn',
-          DATABASE_PATH: join(dataDir, 'e2e.db'),
           WEB_DIST_DIR: 'apps/web/dist',
         },
       },

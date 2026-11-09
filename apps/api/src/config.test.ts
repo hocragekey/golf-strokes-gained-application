@@ -6,7 +6,6 @@ describe('loadConfig', () => {
     expect(loadConfig({})).toMatchObject({
       HOST: '127.0.0.1',
       PORT: 3000,
-      DATABASE_PATH: './data/golf-sg.db',
     });
   });
 
