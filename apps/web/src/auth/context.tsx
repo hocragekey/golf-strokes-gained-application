@@ -133,14 +133,17 @@ export function AccountProvider({
   // Outbox size drives the status line and a debounced push after local changes (FR-SYNC-02).
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout> | undefined;
-    let last = -1;
-    const sub = liveQuery(() => db.pending.count()).subscribe((pending) => {
+    let last = '';
+    const sub = liveQuery(() => db.pending.toArray()).subscribe((entries) => {
+      const pending = entries.length;
       setStatus((s) => ({ ...s, pending }));
-      if (profile && pending > 0 && pending !== last) {
+      // Any new or re-edited entry schedules a push, even when the count stays the same.
+      const signature = entries.map((e) => `${e.key}@${e.updatedAt}`).join(',');
+      if (profile && pending > 0 && signature !== last) {
         clearTimeout(timer);
         timer = setTimeout(() => void sync(), SYNC_DELAY_MS);
       }
-      last = pending;
+      last = signature;
     });
     return () => {
       clearTimeout(timer);
@@ -171,10 +174,14 @@ export function AccountProvider({
 
   const signIn = useCallback(
     async (s: Session) => {
-      session.current = s;
-      await exclusive(() => engine.adopt(s.profile.sub));
+      // The token switches only once the outbox belongs to this account, so a sync already in
+      // flight can never upload one golfer's rounds with another golfer's token.
+      await exclusive(async () => {
+        await engine.adopt(s.profile.sub);
+        session.current = s;
+        profileRef.current = s.profile;
+      });
       localStorage.setItem(PROFILE_KEY, JSON.stringify(s.profile));
-      profileRef.current = s.profile;
       setProfile(s.profile);
     },
     [exclusive, engine],
@@ -182,10 +189,21 @@ export function AccountProvider({
 
   const signOut = useCallback(
     async (removeData: boolean) => {
+      await exclusive(async () => {
+        if (removeData && (await engine.pendingCount()) > 0) {
+          await engine.run().catch(() => undefined);
+          const left = await engine.pendingCount();
+          if (left > 0) {
+            throw new Error(
+              `${String(left)} change${left === 1 ? ' has' : 's have'} not uploaded yet. Sync when you have signal, or sign out keeping your rounds on this device.`,
+            );
+          }
+        }
+        await engine.reset(removeData);
+        session.current = null;
+        profileRef.current = null;
+      });
       client.signOut();
-      session.current = null;
-      profileRef.current = null;
-      await exclusive(() => engine.reset(removeData));
       localStorage.removeItem(PROFILE_KEY);
       setProfile(null);
       setStatus((s) => ({ state: 'idle', pending: s.pending }));
@@ -204,9 +222,12 @@ export function AccountProvider({
   );
 
   const deleteAccount = useCallback(async () => {
-    await exclusive(() => api.deleteAccount());
+    await exclusive(async () => {
+      await api.deleteAccount();
+      await engine.forgetServerCopy();
+    });
     await signOut(false);
-  }, [exclusive, api, signOut]);
+  }, [exclusive, api, engine, signOut]);
 
   const value = useMemo<Account>(
     () =>

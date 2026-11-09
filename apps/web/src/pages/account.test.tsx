@@ -117,5 +117,26 @@ describe('Account page', () => {
     ).toBeInTheDocument();
     expect(server.items.size).toBe(0);
     expect(await store.db.rounds.count()).toBe(1);
+
+    // Signing back in must not restore the deleted account data from this device.
+    await userEvent.click(screen.getByRole('button', { name: 'Fake Google' }));
+    await waitFor(() => {
+      expect(screen.getByRole('status')).toHaveTextContent(/^Synced/);
+    });
+    expect(server.items.size).toBe(0);
+  });
+
+  it('refuses to remove rounds from the device while changes have not uploaded', async () => {
+    const { store, server } = setup();
+    server.api.push = () => Promise.reject(new Error('No signal'));
+    await store.saveRound(roundInput([par4]));
+    await userEvent.click(await screen.findByRole('button', { name: 'Fake Google' }));
+    await waitFor(() => {
+      expect(screen.getByRole('status')).toHaveTextContent(/Sync problem/);
+    });
+    await userEvent.click(screen.getByRole('button', { name: 'Sign out' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent(/2 changes have not uploaded yet/);
+    expect(await store.db.rounds.count()).toBe(1);
+    expect(screen.getByText('Pat Golfer')).toBeInTheDocument();
   });
 });

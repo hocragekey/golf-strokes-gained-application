@@ -64,12 +64,26 @@ export class SyncEngine {
     });
   }
 
-  /** Called on sign-out: forget sync state and optionally the golfer's data (FR-ACCT-03). */
+  /**
+   * Called on sign-out (FR-ACCT-03). Keeping data keeps the outbox and sync state too, so unsent
+   * edits and deletes still upload when the same golfer signs back in. Removing data wipes it all;
+   * callers must make sure nothing is pending first.
+   */
   async reset(removeData: boolean): Promise<void> {
+    if (!removeData) return;
     const tables = [this.db.rounds, this.db.courses, this.db.pending, this.db.meta];
     await this.db.transaction('rw', tables, async () => {
-      await Promise.all([this.db.pending.clear(), this.db.meta.clear()]);
-      if (removeData) await Promise.all([this.db.rounds.clear(), this.db.courses.clear()]);
+      await Promise.all(tables.map((t) => t.clear()));
+    });
+  }
+
+  /**
+   * Called after the server copy was deleted (FR-ACCT-04): rounds kept on the device are not
+   * queued again, so signing back in does not restore the deleted account data.
+   */
+  async forgetServerCopy(): Promise<void> {
+    await this.db.transaction('rw', this.db.pending, this.db.meta, async () => {
+      await Promise.all([this.db.pending.clear(), this.db.meta.delete('cursor')]);
     });
   }
 

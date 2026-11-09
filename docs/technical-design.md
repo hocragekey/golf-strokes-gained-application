@@ -402,7 +402,11 @@ seconds after a local change, and on "Sync now":
 4. Store the new cursor and "last synced" time.
 
 First sign-in on a device (or as a different `sub`) marks every local entity pending, so existing
-rounds upload (FR-SYNC-01). Sign-out clears the cursor and optionally the local data (FR-ACCT-03).
+rounds upload (FR-SYNC-01). Signing out while keeping data keeps the outbox and sync state, so
+unsent edits and deletes upload when the same golfer signs back in. Removing data first tries a last
+sync and refuses while changes are still pending (FR-ACCT-03). Deleting the account clears the
+outbox, so rounds kept on the device are not uploaded again on the next sign-in (FR-ACCT-04). The
+access token switches to a new account only after the outbox has been re-queued for it.
 
 **Infrastructure.** `infra/cloudformation/api.yml` per environment (table, function, role, log
 groups, HTTP API, authorizer, routes, throttled stage). The Lambda bundle is uploaded to the

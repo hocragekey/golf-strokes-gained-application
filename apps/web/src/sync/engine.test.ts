@@ -114,6 +114,8 @@ describe('SyncEngine', () => {
     await a.engine.adopt('bob');
     expect(await a.engine.pendingCount()).toBe(2);
     expect(await a.engine.meta('cursor')).toBeUndefined();
+    await a.engine.reset(false);
+    expect(await a.engine.pendingCount()).toBe(2);
     await a.engine.reset(true);
     expect(await a.store.db.rounds.count()).toBe(0);
     expect(await a.engine.pendingCount()).toBe(0);
