@@ -8,7 +8,7 @@ set -euo pipefail
 REPO="${REPO:-hocragekey/golf-strokes-gained-application}"
 REGION="${AWS_REGION:-us-east-1}"
 STACK="${STACK:-golf-sg-bootstrap}"
-REVIEWER="${PROD_REVIEWER:-${REPO%%/*}}"
+REVIEWER="${PROD_REVIEWER:-}"
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 log() { printf '\n==> %s\n' "$*"; }
@@ -21,6 +21,15 @@ account="$(aws sts get-caller-identity --query Account --output text)"
 echo "AWS account: $account  region: $REGION  repo: $REPO"
 gh api "repos/$REPO" --jq '.permissions.admin' | grep -qx true ||
   { echo "gh user needs admin on $REPO" >&2; exit 1; }
+# Keep existing prod reviewers on re-runs; otherwise default to PROD_REVIEWER or the gh user
+# (the repo owner may be an organization, which can't be a reviewer).
+prod_reviewers="$(gh api "repos/$REPO/environments/prod" \
+  --jq '[.protection_rules[]? | select(.type == "required_reviewers") | .reviewers[]
+         | {type, id: .reviewer.id}]' 2>/dev/null || echo '[]')"
+if [[ -n "$REVIEWER" || "$prod_reviewers" == "[]" ]]; then
+  REVIEWER="${REVIEWER:-$(gh api user --jq .login)}"
+  prod_reviewers="[{\"type\":\"User\",\"id\":$(gh api "users/$REVIEWER" --jq .id)}]"
+fi
 
 log "Deploying $STACK"
 overrides=("GitHubOwner=${REPO%%/*}" "GitHubRepo=${REPO##*/}")
@@ -44,12 +53,11 @@ output() {
     --query "Stacks[0].Outputs[?OutputKey=='$1'].OutputValue" --output text
 }
 
-reviewer_id="$(gh api "users/$REVIEWER" --jq .id)"
 for env in dev prod; do
   Env="${env^}"
   log "Configuring GitHub environment $env"
   if [[ "$env" == prod ]]; then
-    body="{\"reviewers\":[{\"type\":\"User\",\"id\":$reviewer_id}],\"deployment_branch_policy\":{\"protected_branches\":false,\"custom_branch_policies\":true}}"
+    body="{\"reviewers\":$prod_reviewers,\"deployment_branch_policy\":{\"protected_branches\":false,\"custom_branch_policies\":true}}"
   else
     body='{"deployment_branch_policy":{"protected_branches":false,"custom_branch_policies":true}}'
   fi
