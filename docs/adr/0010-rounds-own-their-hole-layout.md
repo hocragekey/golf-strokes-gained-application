@@ -31,3 +31,9 @@ rounds (hence the old FR-COURSE-02/03 locks).
   card that was played, tees and course changes don't rewrite history, and each round syncs as one
   self-contained document in Phase 2.
 - A shared course library (FR-COURSE-04) slots in as another source for pre-fill.
+
+## Update (PRD 1.5)
+
+The owner removed saved courses and backup import. Rounds still own their layout, which is what
+made the removal safe: no round or SG result depended on a saved course. Pre-fill will return via a
+course data integration (FR-COURSE-04).

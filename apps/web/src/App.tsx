@@ -4,7 +4,6 @@ import { OfflineBadge } from './components/OfflineBadge';
 import { Account } from './pages/Account';
 import { Backup } from './pages/Backup';
 import { CardGuide } from './pages/CardGuide';
-import { Courses } from './pages/Courses';
 import { Dashboard } from './pages/Dashboard';
 import { NotFound } from './pages/NotFound';
 import { RoundDetail } from './pages/RoundDetail';
@@ -31,7 +30,7 @@ export function App() {
             New round
           </NavLink>
           <NavLink to="/guide">Card guide</NavLink>
-          <NavLink to="/backup">Backup</NavLink>
+          <NavLink to="/data">My data</NavLink>
           {enabled && (
             <NavLink
               to="/account"
@@ -50,9 +49,8 @@ export function App() {
           <Route path="/rounds/new" element={<RoundEntry />} />
           <Route path="/rounds/:id" element={<RoundDetail />} />
           <Route path="/rounds/:id/edit" element={<RoundEntry />} />
-          <Route path="/courses" element={<Courses />} />
           <Route path="/guide" element={<CardGuide />} />
-          <Route path="/backup" element={<Backup />} />
+          <Route path="/data" element={<Backup />} />
           <Route path="/account" element={<Account />} />
           <Route path="*" element={<NotFound />} />
         </Routes>

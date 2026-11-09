@@ -90,7 +90,7 @@ describe('Account page', () => {
     await waitFor(() => {
       expect(screen.getByRole('status')).toHaveTextContent(/^Synced/);
     });
-    expect(server.items.size).toBe(2);
+    expect(server.items.size).toBe(1);
   });
 
   it('signs out and optionally removes rounds from the device', async () => {
@@ -108,7 +108,7 @@ describe('Account page', () => {
     vi.spyOn(window, 'confirm').mockReturnValue(true);
     await userEvent.click(await screen.findByRole('button', { name: 'Fake Google' }));
     await waitFor(() => {
-      expect(server.items.size).toBe(2);
+      expect(server.items.size).toBe(1);
     });
     const section = screen.getByRole('heading', { name: 'Delete account data' }).parentElement;
     await userEvent.click(within(section!).getByRole('button', { name: 'Delete account data' }));
@@ -135,7 +135,7 @@ describe('Account page', () => {
       expect(screen.getByRole('status')).toHaveTextContent(/Sync problem/);
     });
     await userEvent.click(screen.getByRole('button', { name: 'Sign out' }));
-    expect(await screen.findByRole('alert')).toHaveTextContent(/2 changes have not uploaded yet/);
+    expect(await screen.findByRole('alert')).toHaveTextContent(/1 change has not uploaded yet/);
     expect(await store.db.rounds.count()).toBe(1);
     expect(screen.getByText('Pat Golfer')).toBeInTheDocument();
   });

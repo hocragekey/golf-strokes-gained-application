@@ -18,16 +18,8 @@ describe('LocalStore outbox', () => {
     const { store } = device(fakeServer().api);
     const id = (await store.saveRound(roundInput([par4]))).round.id;
     const pending = await store.db.pending.toArray();
-    expect(pending.map((p) => p.kind).sort()).toEqual(['course', 'round']);
+    expect(pending.map((p) => p.kind).sort()).toEqual(['round']);
     await store.deleteRound(id);
-    expect((await store.db.pending.get(changeKey('round', id)))?.deleted).toBe(true);
-  });
-
-  it('queues tombstones for entities a backup import removes', async () => {
-    const { store } = device(fakeServer().api);
-    const id = (await store.saveRound(roundInput([par4]))).round.id;
-    await store.db.pending.clear();
-    await store.importBackup({ ...(await store.exportBackup()), courses: [], rounds: [] });
     expect((await store.db.pending.get(changeKey('round', id)))?.deleted).toBe(true);
   });
 });
@@ -46,7 +38,7 @@ describe('SyncEngine', () => {
     const b = device(api);
     await b.engine.adopt('alice');
     const result = await b.engine.run();
-    expect(result.pulled).toBe(2);
+    expect(result.pulled).toBe(1);
     expect(await b.store.db.rounds.get(id)).toBeDefined();
   });
 
@@ -112,10 +104,10 @@ describe('SyncEngine', () => {
     await a.engine.adopt('alice');
     await a.engine.run();
     await a.engine.adopt('bob');
-    expect(await a.engine.pendingCount()).toBe(2);
+    expect(await a.engine.pendingCount()).toBe(1);
     expect(await a.engine.meta('cursor')).toBeUndefined();
     await a.engine.reset(false);
-    expect(await a.engine.pendingCount()).toBe(2);
+    expect(await a.engine.pendingCount()).toBe(1);
     await a.engine.reset(true);
     expect(await a.store.db.rounds.count()).toBe(0);
     expect(await a.engine.pendingCount()).toBe(0);

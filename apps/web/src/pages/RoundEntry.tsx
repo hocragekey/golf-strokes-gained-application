@@ -5,12 +5,11 @@ import {
   parseHoleNotation,
   SHORT_GAME_LIES,
   TEE_RESULTS,
-  type CourseHole,
   type RoundDetail,
 } from '@golf-sg/shared';
 import { useState, type ReactNode } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
-import { useCourses, useRound, useSaveRound } from '../data/hooks';
+import { useRound, useSaveRound } from '../data/hooks';
 import {
   draftFromEntry,
   emptyDraft,
@@ -234,13 +233,7 @@ interface Position {
   step: Step | 'details';
 }
 
-function Scorecard({
-  existing,
-  savedCourses,
-}: {
-  existing?: RoundDetail;
-  savedCourses: { name: string; tees: string; holes: CourseHole[] }[];
-}) {
+function Scorecard({ existing }: { existing?: RoundDetail }) {
   const navigate = useNavigate();
   const save = useSaveRound(existing?.round.id);
   const r = existing?.round;
@@ -255,7 +248,6 @@ function Scorecard({
       return hole ? layoutFromHole(hole) : emptyLayout();
     }),
   );
-  const [layoutTouched, setLayoutTouched] = useState(r !== undefined);
   const [drafts, setDrafts] = useState<HoleDraft[]>(() =>
     Array.from({ length: 18 }, (_, i) => {
       const entry = r?.holes[i];
@@ -277,7 +269,6 @@ function Scorecard({
     setDrafts((prev) => prev.map((d, j) => (j === pos.hole ? { ...d, ...patch } : d)));
   };
   const updateLayout = (patch: Partial<LayoutDraft>) => {
-    setLayoutTouched(true);
     setLayout((prev) => prev.map((l, j) => (j === pos.hole ? { ...l, ...patch } : l)));
   };
 
@@ -304,32 +295,6 @@ function Scorecard({
     if (i > 0) goTo(steps[i - 1] ?? 'layout');
     else if (pos.hole > 0) setPos({ hole: pos.hole - 1, step: 'review' });
     else setPos({ hole: 0, step: 'details' });
-  };
-
-  /** Pre-fills par and yardage when the course name matches one played before. */
-  const pickCourse = (name: string, teeName = tees, teesChanged = false) => {
-    setCourseName(name);
-    if (layoutTouched) return;
-    const key = (s: string) => s.trim().toLowerCase();
-    const exact = savedCourses.find(
-      (c) => key(c.name) === key(name) && key(c.tees) === key(teeName),
-    );
-    // A new tee name at a known course is a new layout: never swap it back to the saved tees.
-    const match =
-      exact ?? (teesChanged ? undefined : savedCourses.find((c) => key(c.name) === key(name)));
-    if (!match) {
-      // Unsaved tees at a known course: keep the pars but make the golfer copy the new yardages.
-      if (teesChanged) setLayout((prev) => prev.map((h) => ({ ...h, yardage: '' })));
-      return;
-    }
-    if (!teesChanged) setTees(match.tees);
-    setHoleCount(match.holes.length > 9 ? 18 : 9);
-    setLayout(
-      Array.from({ length: 18 }, (_, i) => {
-        const hole = match.holes[i];
-        return hole ? layoutFromHole(hole) : emptyLayout();
-      }),
-    );
   };
 
   const status = (i: number): 'done' | 'error' | 'todo' => {
@@ -402,28 +367,19 @@ function Scorecard({
         <div className="question">
           <h3>{existing ? 'Round details' : 'New round'}</h3>
           <p className="muted small">
-            No setup needed: we&apos;ll ask for each hole&apos;s par and yardage as you go. Name the
-            course if you want it remembered for next time.
+            No setup needed: we&apos;ll ask for each hole&apos;s par and yardage as you go.
           </p>
           <div className="row">
             <label className="field grow">
               <span>Course (optional)</span>
               <input
                 aria-label="Course (optional)"
-                list="saved-courses"
                 value={courseName}
                 placeholder="e.g. Pebble Creek"
                 onChange={(e) => {
-                  pickCourse(e.target.value);
+                  setCourseName(e.target.value);
                 }}
               />
-              <datalist id="saved-courses">
-                {savedCourses.map((c) => (
-                  <option key={`${c.name}-${c.tees}`} value={c.name}>
-                    {c.tees}
-                  </option>
-                ))}
-              </datalist>
             </label>
             <label className="field">
               <span>Tees</span>
@@ -432,7 +388,6 @@ function Scorecard({
                 placeholder="White"
                 onChange={(e) => {
                   setTees(e.target.value);
-                  if (courseName) pickCourse(courseName, e.target.value, true);
                 }}
               />
             </label>
@@ -912,23 +867,22 @@ function Scorecard({
 
 export function RoundEntry() {
   const { id } = useParams();
-  const courses = useCourses();
   const round = useRound(id);
 
-  if (courses.isPending || (id !== undefined && round.isPending)) {
+  if (id !== undefined && round.isPending) {
     return <p className="muted">Loading…</p>;
   }
-  if (courses.isError || round.isError) {
+  if (round.isError) {
     return (
       <p className="form-error" role="alert">
-        Failed to load: {(courses.error ?? round.error)?.message}
+        Failed to load: {round.error.message}
       </p>
     );
   }
   return (
     <div className="stack">
       <h2>{id !== undefined ? 'Edit round' : 'Enter round'}</h2>
-      <Scorecard existing={round.data} savedCourses={courses.data} />
+      <Scorecard existing={round.data} />
     </div>
   );
 }

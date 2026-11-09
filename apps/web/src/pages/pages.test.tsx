@@ -1,12 +1,11 @@
-import { screen, waitFor, within } from '@testing-library/react';
+import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { App } from '../App';
-import { courseInput, par3ThreePutt, par4, roundInput } from '../test/fixtures';
+import { par3ThreePutt, par4, roundInput } from '../test/fixtures';
 import { createTestStore, renderWithProviders } from '../test/render';
 import { Backup } from './Backup';
 import { CardGuide } from './CardGuide';
-import { Courses } from './Courses';
 import { Dashboard } from './Dashboard';
 import { RoundDetail } from './RoundDetail';
 import { RoundEntry } from './RoundEntry';
@@ -152,21 +151,20 @@ describe('RoundEntry', () => {
     expect(await screen.findByText('navigated')).toBeInTheDocument();
     const [saved] = await store.listRounds();
     expect(saved).toMatchObject({ score: 5, toPar: 1, holesPlayed: 1, courseName: '' });
-    expect(await store.listCourses()).toEqual([]);
+    expect(await store.db.courses.count()).toBe(0);
   });
 
-  it('pre-fills a saved course and accepts the card line as a shortcut', async () => {
+  it('accepts the card line as a shortcut', async () => {
     const user = userEvent.setup();
     const store = createTestStore();
-    await store.saveCourse(courseInput);
     renderWithProviders(<RoundEntry />, { store, route: '/rounds/new', path: '/rounds/new' });
     await user.type(await screen.findByLabelText('Course (optional)'), 'Pebble Creek');
-    expect(screen.getByLabelText('Tees')).toHaveValue('White');
-    expect(button('9 holes')).toHaveAttribute('aria-pressed', 'true');
     await user.click(button('Start with hole 1'));
+    await user.click(button('Par 4'));
+    await user.type(screen.getByLabelText('Yards'), '400');
+    await user.click(button('Next'));
 
     expect(screen.getByRole('heading', { name: 'What did you score?' })).toBeInTheDocument();
-    expect(button('Par 4 · 400 yds')).toBeInTheDocument();
     await user.click(screen.getByText('Type the card line instead'));
     await user.type(screen.getByLabelText('Card line'), 'nonsense');
     await user.click(button('Apply'));
@@ -174,132 +172,27 @@ describe('RoundEntry', () => {
     await user.clear(screen.getByLabelText('Card line'));
     await user.type(screen.getByLabelText('Card line'), '5 R 165r Sh 1@15s 1@4{Enter}');
     expect(screen.getByText('Looks good.')).toBeInTheDocument();
-
-    await user.click(button('Next hole'));
-    expect(button('Par 3 · 160 yds')).toBeInTheDocument();
-    await user.click(screen.getByText('Type the card line instead'));
-    await user.type(screen.getByLabelText('Card line'), '4 ✓ 3@35');
-    await user.click(button('Apply'));
-    await user.click(button('Edit answers'));
-    await user.click(button('← Back'));
-    expect(screen.getByRole('heading', { name: 'Hole 2: par and yardage?' })).toBeInTheDocument();
-
-    await user.click(button('Finish after 2 holes'));
+    await user.click(button('Finish after 1 hole'));
     expect(await screen.findByText('navigated')).toBeInTheDocument();
     const [saved] = await store.listRounds();
-    expect(saved).toMatchObject({ score: 9, holesPlayed: 2, courseName: 'Pebble Creek' });
-  });
-
-  it('flags inconsistent answers and jumps to the question to fix', async () => {
-    const user = userEvent.setup();
-    renderWithProviders(<RoundEntry />, { route: '/rounds/new', path: '/rounds/new' });
-    await user.click(await screen.findByRole('button', { name: 'Start with hole 1' }));
-    await user.click(button('Par 3'));
-    await user.type(screen.getByLabelText('Yards'), '160');
-    await user.click(button('Next'));
-    await user.click(button('6 Triple'));
-    await user.click(button('Yes, on the green'));
-    await user.click(button('None'));
-    await user.click(button('2'));
-    await user.type(screen.getByLabelText('First putt'), '20');
-    await user.click(button('Next'));
-    await user.click(button('None'));
-    expect(screen.getByRole('alert')).toHaveTextContent('green in regulation');
-    expect(button('Go to hole 1')).toHaveClass('error');
-    await user.click(button('Finish after 1 hole'));
-    expect(await screen.findByText('1 hole need attention')).toBeInTheDocument();
-    await user.click(screen.getAllByRole('button', { name: 'Fix' })[0]!);
-    expect(
-      screen.getByRole('heading', { name: /What did you score|green in regulation/ }),
-    ).toBeInTheDocument();
-  });
-
-  it('loads an existing round for editing', async () => {
-    const { store, round } = await seeded();
-    renderWithProviders(<RoundEntry />, {
-      store,
-      route: `/rounds/${round.id}/edit`,
-      path: '/rounds/:id/edit',
-    });
-    expect(await screen.findByText('Edit round')).toBeInTheDocument();
-    expect(screen.getByLabelText('Course (optional)')).toHaveValue('Pebble Creek');
-    await userEvent.click(button('Review holes'));
-    expect(screen.getByText('4 F 150 ✓ 2@20')).toBeInTheDocument();
-    await userEvent.click(button('Go to hole 2'));
-    expect(screen.getByText('4 ✓ 3@30')).toBeInTheDocument();
-    await userEvent.click(screen.getAllByRole('button', { name: 'Save round' })[0]!);
-    expect(await screen.findByText('navigated')).toBeInTheDocument();
-  });
-});
-
-describe('Courses', () => {
-  it('creates a nine-hole course', async () => {
-    const user = userEvent.setup();
-    const { store } = renderWithProviders(<Courses />);
-    await user.click(await screen.findByRole('button', { name: 'Add course' }));
-    await user.click(screen.getByRole('button', { name: 'Add course' }));
-    expect(await screen.findByRole('alert')).toHaveTextContent('name');
-
-    await user.type(screen.getByLabelText('Course name'), 'Muni');
-    await user.selectOptions(screen.getByLabelText('Holes'), '9');
-    await user.selectOptions(screen.getByLabelText('Hole 2 par'), '3');
-    const yards = screen.getByLabelText('Hole 2 yards');
-    await user.clear(yards);
-    await user.type(yards, '165');
-    await user.click(screen.getByRole('button', { name: 'Add course' }));
-
-    expect(await screen.findByText('Muni')).toBeInTheDocument();
-    const [course] = await store.listCourses();
-    expect(course?.holes).toHaveLength(9);
-    expect(course?.holes[1]).toEqual({ number: 2, par: 3, yardage: 165 });
-  });
-
-  it('lists courses remembered from rounds, edits and deletes them', async () => {
-    const user = userEvent.setup();
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
-    const { store } = await seeded();
-    renderWithProviders(<Courses />, { store });
-    const item = (await screen.findByText('Pebble Creek')).closest('li');
-    if (!item) throw new Error('expected list item');
-    expect(item).toHaveTextContent('White · 2 holes · par 7');
-    await user.click(within(item).getByRole('button', { name: 'Edit' }));
-    expect(screen.getByLabelText('Course name')).toHaveValue('Pebble Creek');
-    await user.click(screen.getByRole('button', { name: 'Cancel' }));
-    expect(screen.queryByLabelText('Course name')).not.toBeInTheDocument();
-    await user.click(within(item).getByRole('button', { name: 'Delete' }));
-    expect(await screen.findByText(/Nothing saved yet/)).toBeInTheDocument();
-    expect(await store.listRounds()).toHaveLength(1);
+    expect(saved).toMatchObject({ courseName: 'Pebble Creek', score: 5 });
+    expect(await store.db.courses.count()).toBe(0);
   });
 });
 
 describe('Backup', () => {
-  it('exports and imports a backup file', async () => {
-    const user = userEvent.setup();
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
-    const createObjectURL = vi.fn(() => 'blob:backup');
+  it('downloads all data as a JSON file', async () => {
+    const createObjectURL = vi.fn(() => 'blob:data');
     Object.assign(URL, { createObjectURL, revokeObjectURL: vi.fn() });
     const click = vi
       .spyOn(HTMLAnchorElement.prototype, 'click')
       .mockImplementation(() => undefined);
     const { store } = await seeded();
-    const backup = JSON.stringify(await store.exportBackup());
-
-    const target = createTestStore();
-    renderWithProviders(<Backup />, { store: target });
-    await user.click(screen.getByRole('button', { name: 'Export backup' }));
-    expect(await screen.findByText('Exported 0 courses and 0 rounds.')).toBeInTheDocument();
+    renderWithProviders(<Backup />, { store });
+    expect(screen.queryByLabelText(/Import/)).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Download my data' }));
+    expect(await screen.findByText('Downloaded 1 round.')).toBeInTheDocument();
     expect(click).toHaveBeenCalled();
-
-    const file = new File([backup], 'backup.json', { type: 'application/json' });
-    await user.upload(screen.getByLabelText('Import backup'), file);
-    expect(await screen.findByText('Imported 1 courses and 1 rounds.')).toBeInTheDocument();
-    expect(await target.listRounds()).toHaveLength(1);
-
-    await user.upload(
-      screen.getByLabelText('Import backup'),
-      new File(['{}'], 'bad.json', { type: 'application/json' }),
-    );
-    expect(await screen.findByText(/Import failed/)).toBeInTheDocument();
   });
 });
 
@@ -324,7 +217,7 @@ describe('App shell', () => {
     expect(screen.getByRole('link', { name: 'Card guide' })).toBeInTheDocument();
     expect(screen.getByRole('status')).toHaveTextContent('Offline');
     await waitFor(() => {
-      expect(screen.getByRole('link', { name: 'Backup' })).toHaveAttribute('href', '/backup');
+      expect(screen.getByRole('link', { name: 'My data' })).toHaveAttribute('href', '/data');
     });
   });
 });

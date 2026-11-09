@@ -36,7 +36,7 @@ code and tests.
 | -------------------------- | ------------------------------------------------------------------------------------------------ |
 | `packages/shared/src`      | `schemas.ts` (Zod contracts), `baseline.ts`, `strokes-gained.ts`, `validation.ts`, `insights.ts` |
 | `apps/web/src/data`        | `db.ts` (Dexie schema), `store.ts` (LocalStore), `hooks.ts` (queries), `preferences.ts`          |
-| `apps/web/src/pages`       | Route components: Dashboard, Rounds, RoundEntry, RoundDetail, Courses, CardGuide, Backup         |
+| `apps/web/src/pages`       | Route components: Dashboard, Rounds, RoundEntry, RoundDetail, CardGuide, Backup ("My data")      |
 | `apps/web/src/components`  | `Sg` (bars/values), `BaselineSelect`, `QrCode`, `OfflineBadge`, scorecard helpers                |
 | `apps/api/src`             | Fastify static host for the PWA plus health/readiness routes; no data endpoints or database      |
 | `infra/cloudformation`     | `bootstrap.yml` (OIDC + IAM), `web.yml` (S3 + CloudFront per environment)                        |
@@ -52,9 +52,11 @@ warnings), Prettier, Vitest, Playwright, Husky + lint-staged + commitlint. See
 All entities use client-generated UUIDs and ISO-8601 timestamps so that multiple devices can create
 data offline and later sync without ID collisions (Phase 2).
 
-### Saved course (FR-COURSE-01..03)
+### Course (legacy)
 
-An optional shortcut that pre-fills par and yardage; rounds never reference it (ADR 0010).
+Saved courses were removed in PRD 1.5; the app no longer creates them. The `courses` table and
+`Course` schema remain so data from earlier versions still exports and syncs. Rounds never
+reference a course (ADR 0010); a course data integration (FR-COURSE-04) will fill par and yardage.
 
 | Field                    | Type                       | Rules                                                   |
 | ------------------------ | -------------------------- | ------------------------------------------------------- |
@@ -72,7 +74,7 @@ the SG engine never needs a saved course (ADR 0010).
 | Field                | Type / domain                                          | Notes                                        |
 | -------------------- | ------------------------------------------------------ | -------------------------------------------- |
 | `round.id`           | UUID                                                   |                                              |
-| `courseName`, `tees` | string ≤ 100 / ≤ 40, may be empty                      | display and pre-fill only                    |
+| `courseName`, `tees` | string ≤ 100 / ≤ 40, may be empty                      | display only                                 |
 | `layout[]`           | `{ number, par, yardage }`                             | one per played hole; par 3–6; yardage 50–800 |
 | `playedOn`           | ISO date                                               | defaults to today in local time              |
 | `notes`              | string ≤ 1000                                          |                                              |
@@ -108,12 +110,10 @@ The card notation (FR-CARD-01) maps one-to-one onto these fields:
   (`golf-sg.baseline`), not IndexedDB, because they are not user data and will not sync.
 - **API:** stores no data. Server-side persistence arrives with Phase 2 sync (§13).
 
-### Backup format (FR-DATA-02, FR-DATA-03)
+### Data download (FR-DATA-02)
 
-`{ app: 'golf-strokes-gained', version: 2, exportedAt, courses: Course[], rounds: Round[] }`, validated by `backupSchema` and
-then by `roundIssues(round.holes, round.layout)`. Version 1 files (rounds with `courseId`) are still
-accepted and upgraded with the same `roundFromV1` used by the Dexie migration. Import replaces all data inside a single Dexie
-transaction, so a failed import leaves existing data untouched.
+"Download my data" writes `{ app: 'golf-strokes-gained', version: 2, exportedAt, courses: Course[], rounds: Round[] }`
+(`backupSchema`). There is no import: signing in moves rounds between devices (FR-SYNC-01..03).
 
 ## 4. Strokes-gained engine (FR-SG-01, NFR-PORT-01)
 
@@ -171,7 +171,7 @@ toward off the tee; intermediate long-game positions are not recorded.
 - miss direction only when not GIR
 - score at least the strokes implied by the recorded shots
 
-The same functions run in the browser store, the API, and backup import, so the rules cannot drift.
+The same functions run in the browser store and the sync API, so the rules cannot drift.
 
 ## 6. Insights (FR-SG-02 … FR-SG-07)
 
@@ -198,11 +198,10 @@ well inside NFR-PERF-01's 100 ms phone budget.
 | --------------------------------- | ----------- | ------------------------------ |
 | `/`                               | Dashboard   | FR-HOME-01..04, FR-SG-02..07   |
 | `/rounds`                         | Rounds      | FR-ENTRY-04, FR-SG-06          |
-| `/rounds/new`, `/rounds/:id/edit` | RoundEntry  | FR-ENTRY-01..06, FR-COURSE-03  |
+| `/rounds/new`, `/rounds/:id/edit` | RoundEntry  | FR-ENTRY-01..06                |
 | `/rounds/:id`                     | RoundDetail | FR-SG-01, FR-SG-07, FR-HOME-03 |
-| `/courses`                        | Courses     | FR-COURSE-01..03               |
 | `/guide`                          | CardGuide   | FR-CARD-01..05                 |
-| `/backup`                         | Backup      | FR-DATA-02..03                 |
+| `/data`                           | Backup      | FR-DATA-02                     |
 
 `BrowserRouter` uses `import.meta.env.BASE_URL`, so the app can be hosted at a sub-path.
 
@@ -211,9 +210,8 @@ well inside NFR-PERF-01's 100 ms phone budget.
 - `LocalStore` is the only data access layer; components never touch Dexie directly. It validates
   every write with the shared schemas and validation rules and throws `StoreError` with field-level
   issues.
-- `saveRound` validates the round against its own `layout`, then writes it and upserts the saved
-  course (matched by name + tees, case-insensitive; unplayed holes kept from the previous layout)
-  in one read-write transaction (FR-COURSE-01). Saved courses can be edited or deleted freely.
+- `saveRound` validates the round against its own `layout`, then writes it and its outbox entry in
+  one read-write transaction.
 - TanStack Query caches reads with `networkMode: 'always'` (local data never waits for the network)
   and `staleTime: Infinity`; every mutation invalidates all queries.
 - Query keys include the selected baseline ID (`['stats', limit, baselineId]`, etc.), so switching
@@ -245,7 +243,7 @@ dev and one printed from prod points at prod.
 with `tee` and `approach` dropped on par 3s. Single-choice answers (`Choices`, buttons with
 `aria-pressed`) update the draft and advance; steps with a follow-up number (approach yards,
 short-game yards, first putt) show a Next button. A hole whose par and yardage are already known
-(pre-filled from a saved course) starts at `score`. The review step shows the hole as a card line
+(e.g. when editing) starts at `score`. The review step shows the hole as a card line
 and lists `validateRow` issues, each with a Fix link back to the step that owns the field
 (`FIELD_STEP`). The side scorecard (`aria-label="Scorecard"`) shows hole status (todo/done/error),
 jumps to any hole, and finishes the round early. The card-line shortcut runs `parseHoleNotation`
@@ -302,34 +300,34 @@ Region `us-east-1` (CloudFront certificates must live there). Step-by-step: [dep
 
 ## 11. Testing strategy
 
-| Layer      | Tool                     | Scope                                                                                                                                                           |
-| ---------- | ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Domain     | Vitest                   | baselines (interpolation, scratch scaling), SG formulas and the sum invariant, validation rules, insights                                                       |
-| Data       | Vitest + fake-indexeddb  | LocalStore CRUD, saved-course upsert and pre-fill, Dexie v1→v2 migration, v1/v2 backup import, baseline selection                                               |
-| Components | Vitest + Testing Library | every page, including baseline switching, card guide, pocket sheet and QR                                                                                       |
-| API        | Vitest + Fastify inject  | health, static SPA fallback, data routes absent                                                                                                                 |
-| End-to-end | Playwright               | production build: hero → guided round with no course setup (incl. card line) → SG → practice card → pre-filled next round; offline reload with data; card guide |
-| Infra      | cfn-lint, checkov        | template validity and security posture (skips justified inline)                                                                                                 |
+| Layer      | Tool                     | Scope                                                                                                                                   |
+| ---------- | ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------- |
+| Domain     | Vitest                   | baselines (interpolation, scratch scaling), SG formulas and the sum invariant, validation rules, insights                               |
+| Data       | Vitest + fake-indexeddb  | LocalStore CRUD, data download, Dexie v1→v2 migration, baseline selection                                                               |
+| Components | Vitest + Testing Library | every page, including baseline switching, card guide, pocket sheet and QR                                                               |
+| API        | Vitest + Fastify inject  | health, static SPA fallback, data routes absent                                                                                         |
+| End-to-end | Playwright               | production build: hero → guided round with no course setup (incl. card line) → SG → practice card; offline reload with data; card guide |
+| Infra      | cfn-lint, checkov        | template validity and security posture (skips justified inline)                                                                         |
 
 ## 12. Traceability matrix
 
-| Requirement             | Implementation                                                                                                                        | Verification                                                                           |
-| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
-| FR-CARD-01..05          | `apps/web/src/pages/CardGuide.tsx`, `components/QrCode.tsx`                                                                           | `pages.test.tsx` (card guide), `e2e/golf.spec.ts` (card guide)                         |
-| FR-COURSE-01..03        | `data/store.ts` (`saveRound`, `findCourse`, `saveCourse`, `deleteCourse`), `pages/Courses.tsx`, `pages/RoundEntry.tsx` (`pickCourse`) | `store.test.ts`, `pages.test.tsx` (Courses, RoundEntry), E2E                           |
-| FR-ENTRY-01..05         | `pages/RoundEntry.tsx`, `components/scorecard.ts`, `shared/validation.ts`, `store.saveRound`                                          | `validation.test.ts`, `scorecard.test.ts`, `store.test.ts`, `pages.test.tsx`, E2E      |
-| FR-ENTRY-06             | `shared/notation.ts` (`parseHoleNotation`), `pages/RoundEntry.tsx`                                                                    | `notation.test.ts`, `pages.test.tsx`, E2E                                              |
-| FR-ENTRY-07             | `data/db.ts` (version 2 upgrade), `data/legacy.ts`, `store.importBackup`                                                              | `store.test.ts` (migration, v1 backup)                                                 |
-| FR-HOME-01..05          | `components/Hero.tsx`, `components/Practice.tsx`, `components/Trend.tsx`, `App.tsx`, `styles.css`                                     | `pages.test.tsx` (Dashboard, RoundDetail), E2E                                         |
-| FR-SG-01                | `shared/strokes-gained.ts`                                                                                                            | `strokes-gained.test.ts` (sum invariant)                                               |
-| FR-SG-02..06            | `shared/insights.ts`, `pages/Dashboard.tsx`                                                                                           | `insights.test.ts`, `pages.test.tsx`, E2E                                              |
-| FR-SG-07                | `shared/baseline.ts` (`scratchBaseline`, `getBaseline`), `data/preferences.ts`, `components/BaselineSelect.tsx`                       | `baseline.test.ts`, `store.test.ts`, `pages.test.tsx`                                  |
-| FR-DATA-01..04          | `data/db.ts`, `data/store.ts`, `pages/Backup.tsx`, `main.tsx`                                                                         | `store.test.ts`, `pages.test.tsx` (Backup)                                             |
-| FR-PWA-01..04           | `vite.config.ts`, `components/OfflineBadge.tsx`, `web.yml` cache behaviors                                                            | E2E offline test, deploy smoke test                                                    |
-| FR-ACCT-01..05          | `auth/google.ts`, `auth/context.tsx`, `pages/Account.tsx`, `App.tsx`, `config/app.json`                                               | `account.test.tsx`                                                                     |
-| FR-SYNC-01..06          | `shared/sync.ts`, `apps/sync/src/*`, `data/db.ts` (v3), `store.ts` (outbox), `sync/engine.ts`, `sync/api.ts`, `api.yml`               | `sync.test.ts`, `handler.test.ts`, `*-repo.test.ts` (DynamoDB Local), `engine.test.ts` |
-| NFR-SEC-01, NFR-OPS-01  | `infra/cloudformation/*`, `deploy-web.yml`, `release.yml`, `scripts/aws-bootstrap.sh`                                                 | cfn-lint, checkov, deploy smoke test                                                   |
-| NFR-SEC-02, NFR-QUAL-01 | `.github/workflows/*`, `.github/dependabot.yml`                                                                                       | required `CI OK` check                                                                 |
+| Requirement             | Implementation                                                                                                          | Verification                                                                           |
+| ----------------------- | ----------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| FR-CARD-01..05          | `apps/web/src/pages/CardGuide.tsx`, `components/QrCode.tsx`                                                             | `pages.test.tsx` (card guide), `e2e/golf.spec.ts` (card guide)                         |
+| FR-COURSE-02            | `data/store.ts` (`saveRound`), `shared` round schema (`layout`)                                                         | `store.test.ts`                                                                        |
+| FR-ENTRY-01..05         | `pages/RoundEntry.tsx`, `components/scorecard.ts`, `shared/validation.ts`, `store.saveRound`                            | `validation.test.ts`, `scorecard.test.ts`, `store.test.ts`, `pages.test.tsx`, E2E      |
+| FR-ENTRY-06             | `shared/notation.ts` (`parseHoleNotation`), `pages/RoundEntry.tsx`                                                      | `notation.test.ts`, `pages.test.tsx`, E2E                                              |
+| FR-ENTRY-07             | `data/db.ts` (version 2 upgrade), `data/legacy.ts`                                                                      | `store.test.ts` (migration)                                                            |
+| FR-HOME-01..05          | `components/Hero.tsx`, `components/Practice.tsx`, `components/Trend.tsx`, `App.tsx`, `styles.css`                       | `pages.test.tsx` (Dashboard, RoundDetail), E2E                                         |
+| FR-SG-01                | `shared/strokes-gained.ts`                                                                                              | `strokes-gained.test.ts` (sum invariant)                                               |
+| FR-SG-02..06            | `shared/insights.ts`, `pages/Dashboard.tsx`                                                                             | `insights.test.ts`, `pages.test.tsx`, E2E                                              |
+| FR-SG-07                | `shared/baseline.ts` (`scratchBaseline`, `getBaseline`), `data/preferences.ts`, `components/BaselineSelect.tsx`         | `baseline.test.ts`, `store.test.ts`, `pages.test.tsx`                                  |
+| FR-DATA-01..04          | `data/db.ts`, `data/store.ts`, `pages/Backup.tsx`, `main.tsx`                                                           | `store.test.ts`, `pages.test.tsx` (Backup)                                             |
+| FR-PWA-01..04           | `vite.config.ts`, `components/OfflineBadge.tsx`, `web.yml` cache behaviors                                              | E2E offline test, deploy smoke test                                                    |
+| FR-ACCT-01..05          | `auth/google.ts`, `auth/context.tsx`, `pages/Account.tsx`, `App.tsx`, `config/app.json`                                 | `account.test.tsx`                                                                     |
+| FR-SYNC-01..06          | `shared/sync.ts`, `apps/sync/src/*`, `data/db.ts` (v3), `store.ts` (outbox), `sync/engine.ts`, `sync/api.ts`, `api.yml` | `sync.test.ts`, `handler.test.ts`, `*-repo.test.ts` (DynamoDB Local), `engine.test.ts` |
+| NFR-SEC-01, NFR-OPS-01  | `infra/cloudformation/*`, `deploy-web.yml`, `release.yml`, `scripts/aws-bootstrap.sh`                                   | cfn-lint, checkov, deploy smoke test                                                   |
+| NFR-SEC-02, NFR-QUAL-01 | `.github/workflows/*`, `.github/dependabot.yml`                                                                         | required `CI OK` check                                                                 |
 
 ## 13. Phase 2+ architecture (design intent)
 
@@ -391,7 +389,7 @@ is the per-user authorization (NFR-SEC-03).
 repository interface, so it is tested against an in-memory repository and DynamoDB Local.
 
 **Client.** Dexie version 3 adds `pending` (outbox keyed `kind:id`) and `meta` (sync cursor and
-the `sub` the device last synced as). Every local save, delete and backup import records a pending
+the `sub` the device last synced as). Every local save and delete records a pending
 entry. The sync engine runs on sign-in, on the `online` event, when the tab becomes visible, a few
 seconds after a local change, and on "Sync now":
 

@@ -4,7 +4,7 @@
 | ------- | ------------------------------------------------------------------------------------ |
 | Status  | v1 implemented (Phase 1); Phases 2–5 proposed                                        |
 | Owner   | @hocragekey                                                                          |
-| Version | 1.4, Google sign-in and cross-device sync (see §11)                                  |
+| Version | 1.5, saved courses and backup import removed (see §11)                               |
 | Related | [Technical design](technical-design.md) · [ADRs](adr) · [AWS runbook](deploy-aws.md) |
 
 This PRD is the source of truth for **what** the product does and **why**. The
@@ -56,7 +56,7 @@ enough on that card** to compute SG by category, and a tool that turns it into a
 3. **After the round:** tap **Enter a round**. No course setup: optionally name the course, then
    answer one question at a time per hole (par and yardage from the card, score, drive, approach,
    green, short game, putts, penalties), or type the hole's card line as a shortcut. See SG for the
-   round and the one thing to practise first. Naming the course pre-fills par and yardage next time.
+   round and the one thing to practise first.
 4. **Over time:** watch per-18 SG trends and practice priorities over the last 5, 20, or all rounds;
    compare against a Tour or scratch baseline.
 5. **Safety net:** export a JSON backup; restore it on another device or browser.
@@ -75,17 +75,18 @@ Priority uses MoSCoW. Status: ✅ implemented · ◐ partial · 🚧 in progress
 | FR-CARD-04 | The pocket sheet carries a **QR code** to the card guide of the environment it was printed from, generated on-device (works offline).                                                                               | Should   | ✅     |
 | FR-CARD-05 | The notation captures exactly the fields the SG engine needs (FR-ENTRY-02), nothing more.                                                                                                                           | Must     | ✅     |
 
-### 5.2 Saved courses (optional shortcuts)
+### 5.2 Course data
 
 Rounds never require a course. A round stores the par and yardage of every hole it played, copied
-from the physical scorecard during entry; saved courses only pre-fill those values.
+from the physical scorecard during entry. Saved courses were removed in 1.5; pre-filled par and
+yardage will come from a course data integration (FR-COURSE-04).
 
-| ID           | Requirement                                                                                                                                                                        | Priority | Status  |
-| ------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- | ------- |
-| FR-COURSE-01 | Saving a round with a course name remembers that course (name + tees, case-insensitive) with its par and yardage, keeping holes the round didn't play. List, edit and delete them. | Must     | ✅      |
-| FR-COURSE-02 | Saved rounds never depend on a saved course: editing or deleting a saved course leaves every round and its SG unchanged.                                                           | Must     | ✅      |
-| FR-COURSE-03 | Typing a known course name (and tees) when starting a round pre-fills hole count, par and yardage until the golfer edits them.                                                     | Must     | ✅      |
-| FR-COURSE-04 | Course search / shared course library (pre-filled pars and yardages).                                                                                                              | Could    | 🔜 (P2) |
+| ID           | Requirement                                                                                       | Priority | Status     |
+| ------------ | ------------------------------------------------------------------------------------------------- | -------- | ---------- |
+| FR-COURSE-01 | ~~Remember a course from a named round.~~ Removed in 1.5 (owner): replaced by FR-COURSE-04.       | —        | ❌ Removed |
+| FR-COURSE-02 | Rounds never depend on course data: every round keeps its own par and yardage (ADR 0010).         | Must     | ✅         |
+| FR-COURSE-03 | ~~Pre-fill from a saved course.~~ Removed in 1.5 (owner): replaced by FR-COURSE-04.               | —        | ❌ Removed |
+| FR-COURSE-04 | Course data integration (third-party course database) that pre-fills hole count, par and yardage. | Could    | 🔜 (P2)    |
 
 ### 5.3 Round entry
 
@@ -97,7 +98,7 @@ from the physical scorecard during entry; saved courses only pre-fill those valu
 | FR-ENTRY-04 | Edit and delete saved rounds.                                                                                                                                                                                                                                                                                                      | Must     | ✅     |
 | FR-ENTRY-05 | Guided entry that just asks: one question per screen with large tap targets; single-choice answers advance automatically; questions that don't apply are skipped (no drive or approach distance on par 3s). Each hole ends with a summary (card line + issues with a Fix link); any hole can be revisited; running score is shown. | Must     | ✅     |
 | FR-ENTRY-06 | Optional shortcut: type a hole's one-line card notation (e.g. `5 R 165r Sh 1@15s 1@4`) to fill every answer; parse errors say what is missing. Never required.                                                                                                                                                                     | Should   | ✅     |
-| FR-ENTRY-07 | Existing on-device rounds and v1 backups keep working: each round gets a copy of its course's par, yardage, name and tees.                                                                                                                                                                                                         | Must     | ✅     |
+| FR-ENTRY-07 | Existing on-device rounds keep working: the database upgrade gives each round a copy of its course's par, yardage, name and tees.                                                                                                                                                                                                  | Must     | ✅     |
 
 ### 5.3.1 Home and results
 
@@ -107,7 +108,7 @@ from the physical scorecard during entry; saved courses only pre-fill those valu
 | FR-HOME-02 | With no rounds yet, home explains the three steps (before, during, after the round).                                                                                           | Must     | ✅     |
 | FR-HOME-03 | Dashboard and round results lead with **Practice this first**: the weakest category, its SG, and one concrete drill. Round results also show the best and toughest hole.       | Must     | ✅     |
 | FR-HOME-04 | Dashboard shows a total-SG trend across the selected rounds.                                                                                                                   | Should   | ✅     |
-| FR-HOME-05 | On phones, navigation is a bottom tab bar (Home, Rounds, New round, Card guide, Backup).                                                                                       | Should   | ✅     |
+| FR-HOME-05 | On phones, navigation is a bottom tab bar (Home, Rounds, New round, Card guide, My data).                                                                                      | Should   | ✅     |
 
 ### 5.4 Strokes gained and insights
 
@@ -125,13 +126,13 @@ from the physical scorecard during entry; saved courses only pre-fill those valu
 
 ### 5.5 Data ownership
 
-| ID         | Requirement                                                                                                 | Priority | Status  |
-| ---------- | ----------------------------------------------------------------------------------------------------------- | -------- | ------- |
-| FR-DATA-01 | All courses and rounds are stored on the device. Nothing leaves it unless the golfer signs in (FR-ACCT-01). | Must     | ✅      |
-| FR-DATA-02 | Export all data as a versioned JSON backup.                                                                 | Must     | ✅      |
-| FR-DATA-03 | Import a backup after full schema and cross-field validation; a bad file changes nothing.                   | Must     | ✅      |
-| FR-DATA-04 | Request persistent storage so the browser does not evict data under pressure.                               | Must     | ✅      |
-| FR-DATA-05 | CSV export of rounds and hole data for spreadsheets.                                                        | Could    | 🔜 (P2) |
+| ID         | Requirement                                                                                                 | Priority | Status     |
+| ---------- | ----------------------------------------------------------------------------------------------------------- | -------- | ---------- |
+| FR-DATA-01 | All rounds are stored on the device. Nothing leaves it unless the golfer signs in (FR-ACCT-01).             | Must     | ✅         |
+| FR-DATA-02 | "Download my data": export everything on the device as a versioned JSON file.                               | Must     | ✅         |
+| FR-DATA-03 | ~~Import a backup file.~~ Removed in 1.5 (owner): signing in (FR-SYNC-01..03) moves rounds between devices. | —        | ❌ Removed |
+| FR-DATA-04 | Request persistent storage so the browser does not evict data under pressure.                               | Must     | ✅         |
+| FR-DATA-05 | CSV export of rounds and hole data for spreadsheets.                                                        | Could    | 🔜 (P2)    |
 
 ### 5.6 Offline and install
 
@@ -211,7 +212,7 @@ Everything marked ✅ above. Free, no account. Hosted on AWS (dev + prod) for a 
 - Authenticated, per-user API (NFR-SEC-03): API Gateway verifies the Google ID token, a Lambda
   function stores each golfer's data in DynamoDB under their Google account ID (ADR 0011).
 - Handicap-matched baselines (FR-SG-08), CSV export (FR-DATA-05),
-  drill library (FR-SG-09), shared course library (FR-COURSE-04).
+  drill library (FR-SG-09), course data integration (FR-COURSE-04).
 - Opt-in analytics; status page; error reporting.
 
 ### Phase 3: Native apps and on-course capture
@@ -278,3 +279,4 @@ Principles:
 | 1.2     | Resolved Q2 (owner review): the unauthenticated course/round/stats API endpoints and the server-side SQLite store were removed. The API is now a stateless static host with health checks; server-side data returns only with Phase 2 authenticated, per-user sync (NFR-SEC-03).                                                                                                                                                       |
 | 1.3     | Owner UX review: course setup is no longer required. Rounds carry their own par/yardage (FR-ENTRY-01, FR-COURSE-01..03 rewritten; FR-ENTRY-07 migration). Entry became a guided one-question-per-screen flow (FR-ENTRY-05) with the card-line parser pulled forward from Phase 2 as an optional shortcut (FR-ENTRY-06). New home/results requirements FR-HOME-01..05 (course-photo hero, practice-first drill, trend, mobile tab bar). |
 | 1.4     | Owner request: accounts to save strokes gained and track progress. Added §5.7 (FR-ACCT-01..06, FR-SYNC-01..06). Owner chose Google sign-in (Q3 resolved). Phase 2 roadmap updated to API Gateway + Lambda + DynamoDB (ADR 0011).                                                                                                                                                                                                       |
+| 1.5     | Owner request: saved courses and backup import are not needed yet. Removed FR-COURSE-01/03 and FR-DATA-03; FR-DATA-02 is now "Download my data" (export only). Course pre-fill will come from a course data integration (FR-COURSE-04).                                                                                                                                                                                                |

@@ -47,12 +47,6 @@ test('records a round with no course setup, then works offline', async ({ page, 
   await expect(page.getByRole('list', { name: 'Strokes gained by category' })).toBeVisible();
   await expect(page.getByRole('region', { name: 'Practice this first' })).toBeVisible();
 
-  // The next round at the same course is pre-filled from the first one.
-  await page.getByRole('link', { name: 'New round' }).click();
-  await page.getByLabel('Course (optional)').fill('Riverside Nine');
-  await page.getByRole('button', { name: 'Start with hole 1' }).click();
-  await expect(page.getByRole('button', { name: 'Par 4 · 410 yds' })).toBeVisible();
-
   await page.getByRole('link', { name: 'Home' }).click();
   await expect(page.getByRole('heading', { name: 'Practice priorities' })).toBeVisible();
 
