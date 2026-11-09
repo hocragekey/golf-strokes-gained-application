@@ -1,0 +1,22 @@
+name: Bug report
+description: Something is broken or a stat looks wrong
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: Include the hole data you entered if a strokes-gained number looks wrong.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect?
+    validations:
+      required: true
+  - type: input
+    id: env
+    attributes:
+      label: Browser / device / version
+      placeholder: Safari on iPhone 15, v0.2.0
