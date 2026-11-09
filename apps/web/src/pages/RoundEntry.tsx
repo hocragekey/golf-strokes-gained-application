@@ -317,7 +317,11 @@ function Scorecard({
     // A new tee name at a known course is a new layout: never swap it back to the saved tees.
     const match =
       exact ?? (teesChanged ? undefined : savedCourses.find((c) => key(c.name) === key(name)));
-    if (!match) return;
+    if (!match) {
+      // Unsaved tees at a known course: keep the pars but make the golfer copy the new yardages.
+      if (teesChanged) setLayout((prev) => prev.map((h) => ({ ...h, yardage: '' })));
+      return;
+    }
     if (!teesChanged) setTees(match.tees);
     setHoleCount(match.holes.length > 9 ? 18 : 9);
     setLayout(
