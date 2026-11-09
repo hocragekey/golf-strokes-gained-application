@@ -313,21 +313,23 @@ Region `us-east-1` (CloudFront certificates must live there). Step-by-step: [dep
 
 ## 12. Traceability matrix
 
-| Requirement             | Implementation                                                                                                                        | Verification                                                                      |
-| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
-| FR-CARD-01..05          | `apps/web/src/pages/CardGuide.tsx`, `components/QrCode.tsx`                                                                           | `pages.test.tsx` (card guide), `e2e/golf.spec.ts` (card guide)                    |
-| FR-COURSE-01..03        | `data/store.ts` (`saveRound`, `findCourse`, `saveCourse`, `deleteCourse`), `pages/Courses.tsx`, `pages/RoundEntry.tsx` (`pickCourse`) | `store.test.ts`, `pages.test.tsx` (Courses, RoundEntry), E2E                      |
-| FR-ENTRY-01..05         | `pages/RoundEntry.tsx`, `components/scorecard.ts`, `shared/validation.ts`, `store.saveRound`                                          | `validation.test.ts`, `scorecard.test.ts`, `store.test.ts`, `pages.test.tsx`, E2E |
-| FR-ENTRY-06             | `shared/notation.ts` (`parseHoleNotation`), `pages/RoundEntry.tsx`                                                                    | `notation.test.ts`, `pages.test.tsx`, E2E                                         |
-| FR-ENTRY-07             | `data/db.ts` (version 2 upgrade), `data/legacy.ts`, `store.importBackup`                                                              | `store.test.ts` (migration, v1 backup)                                            |
-| FR-HOME-01..05          | `components/Hero.tsx`, `components/Practice.tsx`, `components/Trend.tsx`, `App.tsx`, `styles.css`                                     | `pages.test.tsx` (Dashboard, RoundDetail), E2E                                    |
-| FR-SG-01                | `shared/strokes-gained.ts`                                                                                                            | `strokes-gained.test.ts` (sum invariant)                                          |
-| FR-SG-02..06            | `shared/insights.ts`, `pages/Dashboard.tsx`                                                                                           | `insights.test.ts`, `pages.test.tsx`, E2E                                         |
-| FR-SG-07                | `shared/baseline.ts` (`scratchBaseline`, `getBaseline`), `data/preferences.ts`, `components/BaselineSelect.tsx`                       | `baseline.test.ts`, `store.test.ts`, `pages.test.tsx`                             |
-| FR-DATA-01..04          | `data/db.ts`, `data/store.ts`, `pages/Backup.tsx`, `main.tsx`                                                                         | `store.test.ts`, `pages.test.tsx` (Backup)                                        |
-| FR-PWA-01..04           | `vite.config.ts`, `components/OfflineBadge.tsx`, `web.yml` cache behaviors                                                            | E2E offline test, deploy smoke test                                               |
-| NFR-SEC-01, NFR-OPS-01  | `infra/cloudformation/*`, `deploy-web.yml`, `release.yml`, `scripts/aws-bootstrap.sh`                                                 | cfn-lint, checkov, deploy smoke test                                              |
-| NFR-SEC-02, NFR-QUAL-01 | `.github/workflows/*`, `.github/dependabot.yml`                                                                                       | required `CI OK` check                                                            |
+| Requirement             | Implementation                                                                                                                        | Verification                                                                           |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| FR-CARD-01..05          | `apps/web/src/pages/CardGuide.tsx`, `components/QrCode.tsx`                                                                           | `pages.test.tsx` (card guide), `e2e/golf.spec.ts` (card guide)                         |
+| FR-COURSE-01..03        | `data/store.ts` (`saveRound`, `findCourse`, `saveCourse`, `deleteCourse`), `pages/Courses.tsx`, `pages/RoundEntry.tsx` (`pickCourse`) | `store.test.ts`, `pages.test.tsx` (Courses, RoundEntry), E2E                           |
+| FR-ENTRY-01..05         | `pages/RoundEntry.tsx`, `components/scorecard.ts`, `shared/validation.ts`, `store.saveRound`                                          | `validation.test.ts`, `scorecard.test.ts`, `store.test.ts`, `pages.test.tsx`, E2E      |
+| FR-ENTRY-06             | `shared/notation.ts` (`parseHoleNotation`), `pages/RoundEntry.tsx`                                                                    | `notation.test.ts`, `pages.test.tsx`, E2E                                              |
+| FR-ENTRY-07             | `data/db.ts` (version 2 upgrade), `data/legacy.ts`, `store.importBackup`                                                              | `store.test.ts` (migration, v1 backup)                                                 |
+| FR-HOME-01..05          | `components/Hero.tsx`, `components/Practice.tsx`, `components/Trend.tsx`, `App.tsx`, `styles.css`                                     | `pages.test.tsx` (Dashboard, RoundDetail), E2E                                         |
+| FR-SG-01                | `shared/strokes-gained.ts`                                                                                                            | `strokes-gained.test.ts` (sum invariant)                                               |
+| FR-SG-02..06            | `shared/insights.ts`, `pages/Dashboard.tsx`                                                                                           | `insights.test.ts`, `pages.test.tsx`, E2E                                              |
+| FR-SG-07                | `shared/baseline.ts` (`scratchBaseline`, `getBaseline`), `data/preferences.ts`, `components/BaselineSelect.tsx`                       | `baseline.test.ts`, `store.test.ts`, `pages.test.tsx`                                  |
+| FR-DATA-01..04          | `data/db.ts`, `data/store.ts`, `pages/Backup.tsx`, `main.tsx`                                                                         | `store.test.ts`, `pages.test.tsx` (Backup)                                             |
+| FR-PWA-01..04           | `vite.config.ts`, `components/OfflineBadge.tsx`, `web.yml` cache behaviors                                                            | E2E offline test, deploy smoke test                                                    |
+| FR-ACCT-01..05          | `auth/google.ts`, `auth/context.tsx`, `pages/Account.tsx`, `App.tsx`, `config/app.json`                                               | `account.test.tsx`                                                                     |
+| FR-SYNC-01..06          | `shared/sync.ts`, `apps/sync/src/*`, `data/db.ts` (v3), `store.ts` (outbox), `sync/engine.ts`, `sync/api.ts`, `api.yml`               | `sync.test.ts`, `handler.test.ts`, `*-repo.test.ts` (DynamoDB Local), `engine.test.ts` |
+| NFR-SEC-01, NFR-OPS-01  | `infra/cloudformation/*`, `deploy-web.yml`, `release.yml`, `scripts/aws-bootstrap.sh`                                                 | cfn-lint, checkov, deploy smoke test                                                   |
+| NFR-SEC-02, NFR-QUAL-01 | `.github/workflows/*`, `.github/dependabot.yml`                                                                                       | required `CI OK` check                                                                 |
 
 ## 13. Phase 2+ architecture (design intent)
 
@@ -343,7 +345,8 @@ Region `us-east-1` (CloudFront certificates must live there). Step-by-step: [dep
 ### 13.1 Accounts and sync (FR-ACCT, FR-SYNC; ADR 0011)
 
 **Identity.** The web app loads Google Identity Services (`accounts.google.com/gsi/client`) only
-when a client ID is configured (`VITE_GOOGLE_CLIENT_ID`; FR-ACCT-05) and the golfer opens the
+when a client ID is configured (`googleClientId` in `config/app.json`, overridable with
+`VITE_GOOGLE_CLIENT_ID`; FR-ACCT-05) and the golfer opens the
 Account page or was signed in before. Google returns an ID token (a JWT, 1 hour). The token stays
 in memory only; the profile (`sub`, email, name, picture) is cached in `localStorage` so the
 signed-in state shows offline. When the token expires the app asks GIS for a new one silently
@@ -359,7 +362,7 @@ expiry before any code runs. Routes:
 | Route                 | Body / query                          | Result                                                               |
 | --------------------- | ------------------------------------- | -------------------------------------------------------------------- |
 | `POST /api/sync`      | `{ changes: Change[] }` (max 100)     | `{ applied: string[], stale: string[], rejected: [{ id, reason }] }` |
-| `GET /api/sync`       | `?since=<cursor>` (omit = everything) | `{ changes: Change[], cursor }`                                      |
+| `GET /api/sync`       | `?since=<cursor>` (omit = everything) | `{ changes: Change[], cursor, more }` (pages of 200)                 |
 | `DELETE /api/account` | none                                  | `204`; every item for the caller is deleted                          |
 
 `Change = { kind: 'round' | 'course', id, updatedAt, deletedAt: string | null, data?: Round | Course }`
@@ -368,16 +371,15 @@ carries no data. Round data is validated with the same schemas and `roundIssues`
 
 **Storage.** One DynamoDB table (on-demand, point-in-time recovery, AWS-owned encryption):
 
-| Attribute   | Value                                                               |
-| ----------- | ------------------------------------------------------------------- |
-| `pk`        | `USER#<sub>` from the verified token, never from the request body   |
-| `sk`        | `ROUND#<id>` or `COURSE#<id>`                                       |
-| `updatedAt` | client timestamp used for last-writer-wins                          |
-| `deletedAt` | tombstone timestamp or absent                                       |
-| `syncedAt`  | server timestamp of the write; sort key of local index `bySyncedAt` |
-| `data`      | the entity JSON                                                     |
+| Attribute  | Value                                                               |
+| ---------- | ------------------------------------------------------------------- |
+| `pk`       | `USER#<sub>` from the verified token, never from the request body   |
+| `sk`       | `ROUND#<id>` or `COURSE#<id>`                                       |
+| `version`  | `updatedAt` in epoch ms, compared for last-writer-wins              |
+| `syncedAt` | server timestamp of the write; sort key of local index `bySyncedAt` |
+| `change`   | the validated `Change` (entity JSON, or a tombstone)                |
 
-Writes are conditional: `attribute_not_exists(pk) OR updatedAt < :incoming`, so an older change
+Writes are conditional: `attribute_not_exists(pk) OR version < :incoming`, so an older change
 can never overwrite a newer one (it is reported as `stale` and the newer copy comes back on the next
 pull). Pull queries `bySyncedAt` for `syncedAt > since − 5 s` (overlap absorbs clock skew between
 concurrent Lambda writes; applying a change twice is harmless). Tombstones are kept so a device
@@ -406,8 +408,10 @@ rounds upload (FR-SYNC-01). Sign-out clears the cursor and optionally the local 
 groups, HTTP API, authorizer, routes, throttled stage). The Lambda bundle is uploaded to the
 bootstrap stack's artifact bucket. The web stack takes the API domain as a parameter and adds the
 `/api/*` behavior (caching disabled, all viewer headers except `Host` forwarded). Both API and
-behavior are skipped while the `GOOGLE_CLIENT_ID` repository variable is unset, so deploys keep
-working before the Google client exists.
+behavior are skipped while `config/app.json` has no `googleClientId`, so forks without a Google
+client still deploy the offline app. Engine work (sync, first-sign-in upload, sign-out reset,
+account deletion) is serialized in `auth/context.tsx`, so a sign-out can never interleave with a
+pull that writes rounds back.
 
 **CSP additions** (Google Identity Services): `script-src https://accounts.google.com/gsi/client`,
 `style-src https://accounts.google.com/gsi/style`, `frame-src https://accounts.google.com/gsi/`,
