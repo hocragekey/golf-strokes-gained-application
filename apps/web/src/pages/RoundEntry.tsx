@@ -277,15 +277,18 @@ function Scorecard({
   };
 
   /** Pre-fills par and yardage when the course name matches one played before. */
-  const pickCourse = (name: string, teeName = tees) => {
+  const pickCourse = (name: string, teeName = tees, teesChanged = false) => {
     setCourseName(name);
     if (layoutTouched) return;
     const key = (s: string) => s.trim().toLowerCase();
+    const exact = savedCourses.find(
+      (c) => key(c.name) === key(name) && key(c.tees) === key(teeName),
+    );
+    // A new tee name at a known course is a new layout: never swap it back to the saved tees.
     const match =
-      savedCourses.find((c) => key(c.name) === key(name) && key(c.tees) === key(teeName)) ??
-      savedCourses.find((c) => key(c.name) === key(name));
+      exact ?? (teesChanged ? undefined : savedCourses.find((c) => key(c.name) === key(name)));
     if (!match) return;
-    setTees(match.tees);
+    if (!teesChanged) setTees(match.tees);
     setHoleCount(match.holes.length > 9 ? 18 : 9);
     setLayout(
       Array.from({ length: 18 }, (_, i) => {
@@ -395,7 +398,7 @@ function Scorecard({
                 placeholder="White"
                 onChange={(e) => {
                   setTees(e.target.value);
-                  if (courseName) pickCourse(courseName, e.target.value);
+                  if (courseName) pickCourse(courseName, e.target.value, true);
                 }}
               />
             </label>
