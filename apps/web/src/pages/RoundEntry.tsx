@@ -89,13 +89,17 @@ function Choices<T extends string | number>({
   onPick,
   render = (v) => label(String(v)),
   hint,
+  more,
 }: {
   options: readonly T[];
   selected: T | null;
   onPick: (value: T) => void;
   render?: (value: T) => ReactNode;
   hint?: (value: T) => string | undefined;
+  /** Highest valid count; adds an "Other" box for values beyond the buttons. */
+  more?: number;
 }) {
+  const custom = selected !== null && !options.includes(selected) ? String(selected) : '';
   return (
     <div className="choices">
       {options.map((v) => (
@@ -117,6 +121,29 @@ function Choices<T extends string | number>({
           )}
         </button>
       ))}
+      {more !== undefined && (
+        <label className="choice choice-more">
+          <span className="choice-hint">Other</span>
+          <input
+            aria-label="Other"
+            type="number"
+            inputMode="numeric"
+            min={0}
+            max={more}
+            defaultValue={custom}
+            key={custom}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') e.currentTarget.blur();
+            }}
+            onBlur={(e) => {
+              const n = Number(e.currentTarget.value);
+              if (e.currentTarget.value !== '' && Number.isInteger(n) && n >= 0 && n <= more) {
+                onPick(String(n) as T);
+              }
+            }}
+          />
+        </label>
+      )}
     </div>
   );
 }
@@ -495,6 +522,7 @@ function Scorecard({
         <Question title="What did you score?" help="Every stroke, penalties included.">
           <Choices
             options={range(Math.max(1, par - 2), par + 5).map(String)}
+            more={20}
             selected={draft.score}
             render={(v) => v}
             hint={(v) => SCORE_NAMES[Number(v) - par]}
@@ -591,6 +619,7 @@ function Scorecard({
         >
           <Choices
             options={['0', '1', '2', '3', '4']}
+            more={10}
             selected={draft.shortGameShots}
             render={(v) => (v === '0' ? 'None' : v)}
             onPick={(v) => {
@@ -645,6 +674,7 @@ function Scorecard({
         <Question title="How many putts?">
           <Choices
             options={['0', '1', '2', '3', '4']}
+            more={10}
             selected={draft.putts}
             render={(v) => (v === '0' ? '0 (holed out)' : v)}
             onPick={(v) => {
@@ -685,6 +715,7 @@ function Scorecard({
         <Question title="Any penalty strokes?" help="OB, water, unplayable.">
           <Choices
             options={['0', '1', '2', '3']}
+            more={10}
             selected={draft.penalties}
             render={(v) => (v === '0' ? 'None' : `+${v}`)}
             onPick={(v) => {
