@@ -197,6 +197,11 @@ describe('Backup', () => {
 });
 
 describe('App shell', () => {
+  it('redirects the old backup link to My data', async () => {
+    renderWithProviders(<App />, { route: '/backup' });
+    expect(await screen.findByRole('heading', { name: 'My data' })).toBeInTheDocument();
+  });
+
   it('prints the card guide', async () => {
     const print = vi.spyOn(window, 'print').mockImplementation(() => undefined);
     renderWithProviders(<CardGuide />);

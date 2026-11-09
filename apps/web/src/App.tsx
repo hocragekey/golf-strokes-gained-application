@@ -1,4 +1,4 @@
-import { NavLink, Route, Routes } from 'react-router';
+import { Navigate, NavLink, Route, Routes } from 'react-router';
 import { useAccount } from './auth/context';
 import { OfflineBadge } from './components/OfflineBadge';
 import { Account } from './pages/Account';
@@ -51,6 +51,7 @@ export function App() {
           <Route path="/rounds/:id/edit" element={<RoundEntry />} />
           <Route path="/guide" element={<CardGuide />} />
           <Route path="/data" element={<Backup />} />
+          <Route path="/backup" element={<Navigate to="/data" replace />} />
           <Route path="/account" element={<Account />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
