@@ -22,7 +22,10 @@ export function RoundDetail() {
   }
 
   const { summary, holes, round: r } = round.data;
-  const focus = weakest(summary.sg);
+  const focus = weakest(
+    summary.sg,
+    r.layout.some((h) => h.par !== 3),
+  );
   const byTotal = [...holes].sort((a, b) => b.total - a.total);
   const best = byTotal[0];
   const worst = byTotal.at(-1);

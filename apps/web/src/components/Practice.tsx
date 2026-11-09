@@ -24,8 +24,11 @@ export const DRILLS: Record<CategoryKey, { name: string; how: string }> = {
 
 const KEYS = Object.keys(CATEGORY_LABELS) as CategoryKey[];
 
-export const weakest = (sg: SgCategories): CategoryKey =>
-  KEYS.reduce((worst, key) => (sg[key] < sg[worst] ? key : worst));
+/** The lowest-SG category among those actually played (par 3s have no tee shots). */
+export const weakest = (sg: SgCategories, hasTeeShots = true): CategoryKey =>
+  KEYS.filter((key) => hasTeeShots || key !== 'offTheTee').reduce((worst, key) =>
+    sg[key] < sg[worst] ? key : worst,
+  );
 
 /** The single most valuable thing to practise next, with a drill to do it. */
 export function PracticeFirst({
