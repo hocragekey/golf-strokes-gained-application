@@ -29,6 +29,23 @@ describe('validateRow', () => {
     expect(entry).toMatchObject({ score: 4, teeResult: 'fairway', approachYards: 150, putts: 2 });
   });
 
+  it('treats a short-game shot with no lie as from the fairway', () => {
+    const { entry, errors } = validateRow(
+      {
+        ...good4,
+        score: '5',
+        gir: false,
+        missDirection: 'short',
+        shortGameShots: '1',
+        shortGameYards: '15',
+      },
+      par4,
+    );
+    expect(errors).toEqual({});
+    expect(entry).toMatchObject({ shortGameShots: 1, shortGameLie: 'fairway' });
+    expect(validateRow(good4, par4).entry).toMatchObject({ shortGameLie: null });
+  });
+
   it('ignores tee fields on par 3s', () => {
     const { entry } = validateRow({ ...good3, teeResult: 'left', approachYards: '99' }, par3);
     expect(entry).toMatchObject({ teeResult: null, approachYards: null, approachLie: 'tee' });
