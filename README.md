@@ -44,13 +44,13 @@ docker compose up --build   # http://localhost:3000
 
 ## Repository layout
 
-| Path              | What                                                                            |
-| ----------------- | ------------------------------------------------------------------------------- |
-| `packages/shared` | Pure TS domain: Zod schemas, expected-strokes baselines, SG engine, insights    |
-| `apps/web`        | React + Vite PWA; IndexedDB (Dexie) store; service worker via Workbox           |
-| `apps/api`        | Fastify server: serves the PWA, health checks, and the future sync API (SQLite) |
-| `e2e`             | Playwright tests against the production build, including offline mode           |
-| `docs/adr`        | Architecture decision records                                                   |
+| Path              | What                                                                         |
+| ----------------- | ---------------------------------------------------------------------------- |
+| `packages/shared` | Pure TS domain: Zod schemas, expected-strokes baselines, SG engine, insights |
+| `apps/web`        | React + Vite PWA; IndexedDB (Dexie) store; service worker via Workbox        |
+| `apps/api`        | Fastify server: serves the PWA and health checks (sync API comes in Phase 2) |
+| `e2e`             | Playwright tests against the production build, including offline mode        |
+| `docs/adr`        | Architecture decision records                                                |
 
 ## Common commands
 

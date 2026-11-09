@@ -17,8 +17,8 @@ The app must work fully without a network connection.
   a JSON backup** that is validated with the shared schemas before replacing local data.
 - Entities use **client-generated UUIDs** and `createdAt`/`updatedAt` timestamps so that a future
   sync service can merge data from several devices without ID collisions.
-- The Fastify API serves the PWA and health checks, and its SQLite-backed course/round endpoints
-  are the starting point for the opt-in sync service (see ADR 6).
+- The Fastify API only serves the PWA and health checks. It has no course/round endpoints or
+  database: they were removed until authenticated, per-user sync is built (see ADR 6).
 
 ## Consequences
 

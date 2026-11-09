@@ -8,8 +8,6 @@ services:
       - '127.0.0.1:3000:3000'
     environment:
       LOG_LEVEL: info
-    volumes:
-      - golf-sg-data:/data
     read_only: true
     tmpfs:
       - /tmp
@@ -17,6 +15,3 @@ services:
       - ALL
     security_opt:
       - no-new-privileges:true
-
-volumes:
-  golf-sg-data:

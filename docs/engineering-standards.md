@@ -52,7 +52,7 @@ One-time setup (repo admin): Settings, then Pages, then Source: **GitHub Actions
 
 - **Unit** (`packages/shared`): baseline interpolation, validation, SG engine invariants, stats.
 - **Component** (`apps/web`): pages against a real Dexie store on `fake-indexeddb`.
-- **API** (`apps/api`): Fastify `inject` against in-memory SQLite.
+- **API** (`apps/api`): Fastify `inject` for health checks, static hosting and SPA fallback.
 - **E2E** (`e2e`): Playwright on the production build, including a service-worker offline reload.
 
 ## Runtime and dependencies

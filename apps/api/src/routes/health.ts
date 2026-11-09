@@ -1,18 +1,7 @@
 import type { FastifyPluginCallback } from 'fastify';
-import type { Repository } from '../repository.js';
 
-export const healthRoutes: FastifyPluginCallback<{ repo: Repository }> = (app, { repo }, done) => {
+export const healthRoutes: FastifyPluginCallback = (app, _opts, done) => {
   app.get('/health', () => ({ status: 'ok' }));
-
-  app.get('/ready', async (_req, reply) => {
-    try {
-      repo.ping();
-      return { status: 'ready' };
-    } catch (err) {
-      app.log.error({ err }, 'readiness check failed');
-      return reply.code(503).send({ status: 'unavailable' });
-    }
-  });
-
+  app.get('/ready', () => ({ status: 'ready' }));
   done();
 };
