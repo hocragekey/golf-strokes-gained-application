@@ -200,7 +200,10 @@ export class LocalStore {
     const backup = this.upgradeBackup(data);
     for (const round of backup.rounds) {
       const issues = roundIssues(round.holes, round.layout);
-      if (round.layout.length !== round.holes.length || issues.length > 0) {
+      const numbered =
+        round.holes.every((h, i) => h.holeNumber === i + 1) &&
+        round.layout.every((h, i) => h.number === i + 1);
+      if (!numbered || round.layout.length !== round.holes.length || issues.length > 0) {
         throw new StoreError(`Round ${round.playedOn} is invalid`, issues);
       }
     }

@@ -204,4 +204,14 @@ describe('LocalStore', () => {
     await expect(store.importBackup(empty)).rejects.toBeInstanceOf(StoreError);
     expect(await store.listRounds()).toHaveLength(1);
   });
+
+  it('rejects a backup whose holes and layout are misnumbered', async () => {
+    const store = createTestStore();
+    await store.saveRound(roundInput([par4]));
+    const backup = await store.exportBackup();
+    const [round] = backup.rounds;
+    if (!round?.layout[0]) throw new Error('expected a round');
+    round.layout[0].number = 2;
+    await expect(store.importBackup(backup)).rejects.toThrow(/invalid/);
+  });
 });
