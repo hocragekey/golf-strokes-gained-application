@@ -24,6 +24,10 @@ Parameters:
     Type: String
     Default: ''
     Description: Optional Route 53 hosted zone for DomainName; creates the alias records
+  ApiDomain:
+    Type: String
+    Default: ''
+    Description: Sync API origin (api stack output); adds the same-origin /api/* behavior
   PriceClass:
     Type: String
     Default: PriceClass_100
@@ -32,6 +36,7 @@ Parameters:
 Conditions:
   HasDomain: !Not [!Equals [!Ref DomainName, '']]
   HasDns: !And [!Condition HasDomain, !Not [!Equals [!Ref HostedZoneId, '']]]
+  HasApi: !Not [!Equals [!Ref ApiDomain, '']]
 
 Rules:
   DomainNeedsCertificate:
@@ -143,10 +148,12 @@ Resources:
           ContentSecurityPolicy:
             Override: true
             ContentSecurityPolicy: >-
-              default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline';
-              img-src 'self' data:; font-src 'self'; connect-src 'self'; manifest-src 'self';
-              worker-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self';
-              frame-ancestors 'none'; upgrade-insecure-requests
+              default-src 'self'; script-src 'self' https://accounts.google.com/gsi/client;
+              style-src 'self' 'unsafe-inline' https://accounts.google.com/gsi/style;
+              img-src 'self' data: https://*.googleusercontent.com; font-src 'self';
+              connect-src 'self' https://accounts.google.com/gsi/; frame-src https://accounts.google.com/gsi/;
+              manifest-src 'self'; worker-src 'self'; object-src 'none'; base-uri 'self';
+              form-action 'self'; frame-ancestors 'none'; upgrade-insecure-requests
           ContentTypeOptions:
             Override: true
           FrameOptions:
@@ -175,7 +182,7 @@ Resources:
           - id: CKV_AWS_86
             comment: Access logging deferred until there is real traffic (needs an ACL-enabled log bucket).
           - id: CKV_AWS_310
-            comment: Single S3 origin; there is no secondary origin to fail over to.
+            comment: The S3 site and the sync API are different content; there is no secondary origin to fail over to.
           - id: CKV_AWS_374
             comment: The app is intended to be usable worldwide; no geo restriction.
           - id: CKV_AWS_174
@@ -201,6 +208,14 @@ Resources:
             OriginAccessControlId: !GetAtt OriginAccessControl.Id
             S3OriginConfig:
               OriginAccessIdentity: ''
+          - !If
+            - HasApi
+            - Id: api
+              DomainName: !Ref ApiDomain
+              CustomOriginConfig:
+                OriginProtocolPolicy: https-only
+                OriginSSLProtocols: [TLSv1.2]
+            - !Ref AWS::NoValue
         DefaultCacheBehavior:
           TargetOriginId: site
           ViewerProtocolPolicy: redirect-to-https
@@ -214,6 +229,19 @@ Resources:
               FunctionARN: !GetAtt SpaRewriteFunction.FunctionMetadata.FunctionARN
         # The service worker and app shell must always revalidate so phones pick up new releases.
         CacheBehaviors:
+          # Same-origin sync API: never cached, every viewer header (incl. Authorization) forwarded.
+          - !If
+            - HasApi
+            - PathPattern: /api/*
+              TargetOriginId: api
+              ViewerProtocolPolicy: https-only
+              AllowedMethods: [GET, HEAD, OPTIONS, PUT, POST, PATCH, DELETE]
+              CachedMethods: [GET, HEAD]
+              Compress: true
+              CachePolicyId: 4135ea2d-6df8-44a3-9df3-4b5a84be39ad # Managed-CachingDisabled
+              OriginRequestPolicyId: b689b0a8-53d0-40ab-baf2-68738e2966ac # Managed-AllViewerExceptHostHeader
+              ResponseHeadersPolicyId: !Ref SecurityHeadersPolicy
+            - !Ref AWS::NoValue
           - PathPattern: /sw.js
             TargetOriginId: site
             ViewerProtocolPolicy: redirect-to-https

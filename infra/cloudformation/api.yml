@@ -1,0 +1,258 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >-
+  Golf Strokes Gained - authenticated per-user sync API for one environment. API Gateway HTTP API
+  with a Google JWT authorizer, one Lambda function and a DynamoDB table keyed by Google account.
+
+Parameters:
+  AppName:
+    Type: String
+    Default: golf-sg
+    AllowedPattern: '^[a-z][a-z0-9-]{1,20}$'
+  Environment:
+    Type: String
+    AllowedValues: [dev, prod]
+  GoogleClientId:
+    Type: String
+    Description: Google OAuth web client ID; the only accepted token audience
+    AllowedPattern: '^[0-9]+-[a-z0-9]+\.apps\.googleusercontent\.com$'
+  CodeBucket:
+    Type: String
+    Description: Bucket holding the Lambda bundle (bootstrap artifact bucket)
+  CodeKey:
+    Type: String
+    Description: Object key of the Lambda bundle zip
+
+Conditions:
+  IsProd: !Equals [!Ref Environment, prod]
+
+Resources:
+  Table:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Metadata:
+      checkov:
+        skip:
+          - id: CKV_AWS_119
+            comment: AWS-managed KMS key is sufficient for per-user round data; a CMK adds cost without a consumer.
+    Properties:
+      TableName: !Sub ${AppName}-api-${Environment}
+      BillingMode: PAY_PER_REQUEST
+      DeletionProtectionEnabled: !If [IsProd, true, false]
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      SSESpecification:
+        SSEEnabled: true
+      AttributeDefinitions:
+        - AttributeName: pk
+          AttributeType: S
+        - AttributeName: sk
+          AttributeType: S
+        - AttributeName: syncedAt
+          AttributeType: S
+      KeySchema:
+        - AttributeName: pk
+          KeyType: HASH
+        - AttributeName: sk
+          KeyType: RANGE
+      LocalSecondaryIndexes:
+        - IndexName: bySyncedAt
+          KeySchema:
+            - AttributeName: pk
+              KeyType: HASH
+            - AttributeName: syncedAt
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+      Tags:
+        - Key: app
+          Value: !Ref AppName
+        - Key: environment
+          Value: !Ref Environment
+
+  FunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Metadata:
+      checkov:
+        skip:
+          - id: CKV_AWS_158
+            comment: Logs hold no personal data beyond request metadata; AWS-managed encryption is used.
+    Properties:
+      LogGroupName: !Sub /aws/lambda/${AppName}-api-${Environment}
+      RetentionInDays: !If [IsProd, 90, 14]
+
+  AccessLogGroup:
+    Type: AWS::Logs::LogGroup
+    Metadata:
+      checkov:
+        skip:
+          - id: CKV_AWS_158
+            comment: Access logs hold request metadata only; AWS-managed encryption is used.
+    Properties:
+      LogGroupName: !Sub /aws/apigateway/${AppName}-api-${Environment}
+      RetentionInDays: !If [IsProd, 90, 14]
+
+  FunctionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub ${AppName}-api-${Environment}-function
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: sync
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Sid: Table
+                Effect: Allow
+                Action:
+                  - dynamodb:PutItem
+                  - dynamodb:Query
+                  - dynamodb:BatchWriteItem
+                Resource:
+                  - !GetAtt Table.Arn
+                  - !Sub ${Table.Arn}/index/*
+              - Sid: Logs
+                Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !GetAtt FunctionLogGroup.Arn
+
+  Function:
+    Type: AWS::Lambda::Function
+    Metadata:
+      checkov:
+        skip:
+          - id: CKV_AWS_115
+            comment: Concurrency is bounded by API Gateway stage throttling; new accounts cannot reserve concurrency.
+          - id: CKV_AWS_116
+            comment: Synchronous API; failures are returned to the client, which retries from its outbox.
+          - id: CKV_AWS_117
+            comment: Talks only to DynamoDB over its public endpoint; no VPC resources.
+          - id: CKV_AWS_173
+            comment: The only environment variables are the table name and Node options; no secrets.
+    Properties:
+      FunctionName: !Sub ${AppName}-api-${Environment}
+      Description: Per-user sync (push, pull, delete account)
+      Runtime: nodejs22.x
+      Architectures: [arm64]
+      Handler: index.handler
+      MemorySize: 256
+      Timeout: 15
+      Role: !GetAtt FunctionRole.Arn
+      Code:
+        S3Bucket: !Ref CodeBucket
+        S3Key: !Ref CodeKey
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref Table
+          NODE_OPTIONS: --enable-source-maps
+      LoggingConfig:
+        LogGroup: !Ref FunctionLogGroup
+        LogFormat: JSON
+      Tags:
+        - Key: app
+          Value: !Ref AppName
+        - Key: environment
+          Value: !Ref Environment
+
+  HttpApi:
+    Type: AWS::ApiGatewayV2::Api
+    Properties:
+      Name: !Sub ${AppName}-api-${Environment}
+      ProtocolType: HTTP
+      Description: Served same-origin through the web distribution at /api/*
+      Tags:
+        app: !Ref AppName
+        environment: !Ref Environment
+
+  # Google signs the ID token; API Gateway checks signature, issuer, audience and expiry
+  # before the function runs.
+  GoogleAuthorizer:
+    Type: AWS::ApiGatewayV2::Authorizer
+    Properties:
+      ApiId: !Ref HttpApi
+      Name: google
+      AuthorizerType: JWT
+      IdentitySource:
+        - $request.header.Authorization
+      JwtConfiguration:
+        Issuer: https://accounts.google.com
+        Audience:
+          - !Ref GoogleClientId
+
+  Integration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref HttpApi
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !GetAtt Function.Arn
+      PayloadFormatVersion: '2.0'
+      TimeoutInMillis: 15000
+
+  PullRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref HttpApi
+      RouteKey: GET /api/sync
+      AuthorizationType: JWT
+      AuthorizerId: !Ref GoogleAuthorizer
+      Target: !Sub integrations/${Integration}
+
+  PushRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref HttpApi
+      RouteKey: POST /api/sync
+      AuthorizationType: JWT
+      AuthorizerId: !Ref GoogleAuthorizer
+      Target: !Sub integrations/${Integration}
+
+  DeleteAccountRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref HttpApi
+      RouteKey: DELETE /api/account
+      AuthorizationType: JWT
+      AuthorizerId: !Ref GoogleAuthorizer
+      Target: !Sub integrations/${Integration}
+
+  Stage:
+    Type: AWS::ApiGatewayV2::Stage
+    Properties:
+      ApiId: !Ref HttpApi
+      StageName: $default
+      AutoDeploy: true
+      DefaultRouteSettings:
+        ThrottlingBurstLimit: 50
+        ThrottlingRateLimit: 20
+      AccessLogSettings:
+        DestinationArn: !GetAtt AccessLogGroup.Arn
+        Format: >-
+          {"requestId":"$context.requestId","ip":"$context.identity.sourceIp",
+          "time":"$context.requestTime","route":"$context.routeKey","status":"$context.status",
+          "latencyMs":"$context.responseLatency","authError":"$context.authorizer.error"}
+      Tags:
+        app: !Ref AppName
+        environment: !Ref Environment
+
+  InvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref Function
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${HttpApi}/*
+
+Outputs:
+  ApiDomain:
+    Description: Origin domain for the web distribution's /api/* behavior
+    Value: !Sub ${HttpApi}.execute-api.${AWS::Region}.${AWS::URLSuffix}
+  TableName:
+    Value: !Ref Table
