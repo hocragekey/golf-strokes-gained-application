@@ -1,12 +1,14 @@
 import type { CourseInput, RoundInput } from '@golf-sg/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useStore } from './context';
+import { useBaselineId } from './preferences';
 
 export const queryKeys = {
   courses: ['courses'] as const,
-  rounds: ['rounds'] as const,
-  round: (id: string) => ['rounds', id] as const,
-  stats: (limit?: number) => ['stats', limit ?? 'all'] as const,
+  rounds: (baselineId: string) => ['rounds', baselineId] as const,
+  round: (id: string, baselineId: string) => ['rounds', id, baselineId] as const,
+  stats: (limit: number | undefined, baselineId: string) =>
+    ['stats', limit ?? 'all', baselineId] as const,
 };
 
 export function useCourses() {
@@ -16,21 +18,30 @@ export function useCourses() {
 
 export function useRounds() {
   const store = useStore();
-  return useQuery({ queryKey: queryKeys.rounds, queryFn: () => store.listRounds() });
+  const baselineId = useBaselineId();
+  return useQuery({
+    queryKey: queryKeys.rounds(baselineId),
+    queryFn: () => store.listRounds(baselineId),
+  });
 }
 
 export function useRound(id: string | undefined) {
   const store = useStore();
+  const baselineId = useBaselineId();
   return useQuery({
-    queryKey: queryKeys.round(id ?? ''),
-    queryFn: () => store.getRound(id ?? ''),
+    queryKey: queryKeys.round(id ?? '', baselineId),
+    queryFn: () => store.getRound(id ?? '', baselineId),
     enabled: id !== undefined,
   });
 }
 
 export function useStats(limit?: number) {
   const store = useStore();
-  return useQuery({ queryKey: queryKeys.stats(limit), queryFn: () => store.getStats(limit) });
+  const baselineId = useBaselineId();
+  return useQuery({
+    queryKey: queryKeys.stats(limit, baselineId),
+    queryFn: () => store.getStats(limit, baselineId),
+  });
 }
 
 function useMutate<TArgs, TResult>(fn: (args: TArgs) => Promise<TResult>) {

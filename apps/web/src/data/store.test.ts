@@ -54,6 +54,18 @@ describe('LocalStore', () => {
     expect(detail.summary.sg.putting).toBeLessThan(0);
   });
 
+  it('computes stats and rounds against a chosen baseline', async () => {
+    const { store, detail } = await seed();
+    const tour = await store.getStats();
+    const scratch = await store.getStats(undefined, 'scratch');
+    expect(scratch.baseline).toBe('Scratch (est.)');
+    expect(scratch.sgPer18.total).toBeGreaterThan(tour.sgPer18.total);
+    const round = await store.getRound(detail.round.id, 'scratch');
+    expect(round.summary.sg.total).toBeGreaterThan(detail.summary.sg.total);
+    const [listed] = await store.listRounds('scratch');
+    expect(listed?.sg.total).toBe(round.summary.sg.total);
+  });
+
   it('validates rounds against the course', async () => {
     const { store, course } = await seed();
     const bad = { ...par4, firstPuttFeet: null };

@@ -2,6 +2,7 @@ import { CATEGORY_LABELS, type BucketStat } from '@golf-sg/shared';
 import { useState } from 'react';
 import { Link } from 'react-router';
 import { useStats } from '../data/hooks';
+import { BaselineSelect } from '../components/BaselineSelect';
 import { SgBars, SgValue } from '../components/Sg';
 import { formatNumber, formatPct } from '../format';
 
@@ -90,21 +91,24 @@ export function Dashboard() {
         <h2>
           Strokes gained per 18 <span className="muted small">vs {s.baseline} baseline</span>
         </h2>
-        <label className="field inline">
-          <span className="sr-only">Range</span>
-          <select
-            value={limit}
-            onChange={(e) => {
-              setLimit(Number(e.target.value));
-            }}
-          >
-            {RANGES.map((r) => (
-              <option key={r.value} value={r.value}>
-                {r.label}
-              </option>
-            ))}
-          </select>
-        </label>
+        <div className="actions">
+          <BaselineSelect />
+          <label className="field inline">
+            <span className="sr-only">Range</span>
+            <select
+              value={limit}
+              onChange={(e) => {
+                setLimit(Number(e.target.value));
+              }}
+            >
+              {RANGES.map((r) => (
+                <option key={r.value} value={r.value}>
+                  {r.label}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
       </div>
       <div className="grid-2">
         <section className="card">

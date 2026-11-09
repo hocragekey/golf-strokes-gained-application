@@ -27,7 +27,18 @@ GitHub Actions ──OIDC──▶ golf-sg-deploy-<env> role ──passes──�
   - a no-cache rule for `index.html` and `sw.js` so phones pick up new releases
   - optionally, a custom domain with Route 53 aliases
 
-## One-time setup
+## Quick setup (recommended)
+
+With short-lived admin credentials for the account (`aws sso login` or an STS session) and `gh`
+authenticated as a repo admin:
+
+```bash
+./scripts/aws-bootstrap.sh   # env overrides: AWS_REGION, REPO, PROD_REVIEWER
+```
+
+It runs steps 1–3 below and is safe to re-run. Then follow step 4.
+
+## One-time setup (manual equivalent)
 
 Use `us-east-1`. CloudFront certificates must live there, and keeping everything in one
 region is simplest.

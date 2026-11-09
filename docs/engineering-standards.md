@@ -1,5 +1,16 @@
 # Engineering standards
 
+## Spec-driven development
+
+- [`docs/prd.md`](prd.md) is the source of truth for behavior. Each requirement has a stable ID
+  (`FR-<AREA>-NN`, `NFR-<AREA>-NN`), a priority, and a status.
+- [`docs/technical-design.md`](technical-design.md) explains how each requirement is met and keeps a
+  traceability matrix from requirement to code to tests.
+- A PR that changes behavior updates the PRD (requirement and status) and the technical design in
+  the same PR, and names the requirement IDs it touches in its description. New features start
+  as a PRD change reviewed before implementation.
+- Architecture choices with real alternatives get an ADR in [`docs/adr`](adr).
+
 ## Branching and merging
 
 - Trunk-based: short-lived branches off `main`, squash-merged via PR. Linear history.
