@@ -139,6 +139,9 @@ function Choices<T extends string | number>({
               const n = Number(e.currentTarget.value);
               if (e.currentTarget.value !== '' && Number.isInteger(n) && n >= 0 && n <= more) {
                 onPick(String(n) as T);
+              } else {
+                // Never show a value that differs from the answer that will be saved.
+                e.currentTarget.value = custom;
               }
             }}
           />
