@@ -2,7 +2,7 @@
 
 | Field  | Value                                                                |
 | ------ | -------------------------------------------------------------------- |
-| Status | Matches PRD v1.1 (Phase 1 implemented)                               |
+| Status | Matches PRD v1.2 (Phase 1 implemented)                               |
 | PRD    | [docs/prd.md](prd.md); requirement IDs are cited as `FR-*` / `NFR-*` |
 | ADRs   | [docs/adr](adr)                                                      |
 
@@ -38,7 +38,7 @@ code and tests.
 | `apps/web/src/data`        | `db.ts` (Dexie schema), `store.ts` (LocalStore), `hooks.ts` (queries), `preferences.ts`          |
 | `apps/web/src/pages`       | Route components: Dashboard, Rounds, RoundEntry, RoundDetail, Courses, CardGuide, Backup         |
 | `apps/web/src/components`  | `Sg` (bars/values), `BaselineSelect`, `QrCode`, `OfflineBadge`, scorecard helpers                |
-| `apps/api/src`             | Fastify app, Drizzle/SQLite schema and repository, routes                                        |
+| `apps/api/src`             | Fastify static host for the PWA plus health/readiness routes; no data endpoints or database      |
 | `infra/cloudformation`     | `bootstrap.yml` (OIDC + IAM), `web.yml` (S3 + CloudFront per environment)                        |
 | `scripts/aws-bootstrap.sh` | One-command AWS + GitHub environment setup                                                       |
 | `e2e`                      | Playwright tests against the production build                                                    |
@@ -95,7 +95,7 @@ The card notation (FR-CARD-01) maps one-to-one onto these fields:
   Schema changes add a Dexie version with an upgrade function; never edit an existing version.
 - **Preferences:** per-device UI preferences (comparison baseline) live in `localStorage`
   (`golf-sg.baseline`), not IndexedDB, because they are not user data and will not sync.
-- **API:** SQLite via Drizzle with generated migrations (`pnpm db:generate`); text UUID keys.
+- **API:** stores no data. Server-side persistence arrives with Phase 2 sync (§13).
 
 ### Backup format (FR-DATA-02, FR-DATA-03)
 
@@ -231,15 +231,16 @@ Desktop-first layout capped at ~1160 px with card grids, responsive down to phon
 Form controls have labels or `aria-label`s, invalid cells set `aria-invalid`, and errors render
 with `role="alert"` (NFR-A11Y-01).
 
-## 8. API (self-hosted / Phase 2 foundation)
+## 8. API (self-hosted static host)
 
-Fastify with `@fastify/helmet`, Zod-validated input, Drizzle/SQLite persistence, and the shared
-engine. Endpoints: `GET /health`, `GET /ready`, CRUD on `/courses` and `/rounds`, and `GET /stats`.
-It also serves the built PWA in the container image.
+Fastify with `@fastify/helmet` serves the built PWA in the container image, with SPA history
+fallback and JSON 404s under `/api`. It is stateless: the only endpoints are `GET /api/health`
+(liveness, used by the image `HEALTHCHECK`) and `GET /api/ready` (readiness, used by the CI smoke
+test). Tests assert that `/api/courses`, `/api/rounds` and `/api/stats` return 404.
 
-> **Security caveat (PRD Q2, NFR-SEC-03):** the course/round endpoints are unauthenticated. The
-> Phase 1 UI does not call them and Docker Compose binds to `127.0.0.1`. They must gain
-> authentication and per-user authorization, or be disabled, before any public deployment.
+The earlier unauthenticated course/round/stats endpoints and their SQLite store were removed (PRD
+Q2, resolved in PRD 1.2). Any server-side data API must ship with authentication and per-user
+authorization (NFR-SEC-03); it returns as the Phase 2 sync service.
 
 ## 9. Infrastructure and deployment (NFR-SEC-01, NFR-OPS-01, NFR-COST-01)
 
@@ -274,7 +275,7 @@ Region `us-east-1` (CloudFront certificates must live there). Step-by-step: [dep
 | Domain     | Vitest                   | baselines (interpolation, scratch scaling), SG formulas and the sum invariant, validation rules, insights                        |
 | Data       | Vitest + fake-indexeddb  | LocalStore CRUD, validation, transactions, course-edit conflicts, backup import, baseline selection                              |
 | Components | Vitest + Testing Library | every page, including baseline switching, card guide, pocket sheet and QR                                                        |
-| API        | Vitest + Fastify inject  | routes, validation errors, health                                                                                                |
+| API        | Vitest + Fastify inject  | health, static SPA fallback, data routes absent                                                                                  |
 | End-to-end | Playwright               | production build: course → round → SG → priorities; service worker ready → offline reload with data; card guide and pocket sheet |
 | Infra      | cfn-lint, checkov        | template validity and security posture (skips justified inline)                                                                  |
 
