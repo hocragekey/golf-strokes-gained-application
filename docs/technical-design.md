@@ -42,6 +42,7 @@ code and tests.
 | `infra/cloudformation`     | `bootstrap.yml` (OIDC + IAM), `web.yml` (S3 + CloudFront per environment)                        |
 | `scripts/aws-bootstrap.sh` | One-command AWS + GitHub environment setup                                                       |
 | `e2e`                      | Playwright tests against the production build                                                    |
+| `site`                     | Static marketing and architecture page published to GitHub Pages (ADR 0009)                      |
 
 Toolchain: Node (`.nvmrc`), pnpm workspaces, strict TypeScript, ESLint (type-checked, zero
 warnings), Prettier, Vitest, Playwright, Husky + lint-staged + commitlint. See
@@ -297,6 +298,8 @@ Region `us-east-1` (CloudFront certificates must live there). Step-by-step: [dep
   CodeQL for TypeScript and Actions. Dependabot for npm, Actions, and Docker.
 - **Release** (`release.yml`): release-please (Conventional Commits → semver + changelog), multi-arch
   GHCR image with SBOM and provenance, cosign keyless signing, then AWS deploys.
+- **Pages** (`pages.yml`): publishes the static marketing/architecture page in `site/` to GitHub
+  Pages on changes to `main` (ADR 0009). The app itself is never served from Pages.
 - All third-party actions are pinned to full commit SHAs; workflows default to `contents: read`,
   set timeouts and concurrency, and check out with `persist-credentials: false`.
 
