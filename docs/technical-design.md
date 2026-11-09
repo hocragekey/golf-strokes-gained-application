@@ -331,14 +331,7 @@ Region `us-east-1` (CloudFront certificates must live there). Step-by-step: [dep
 
 ## 13. Phase 2+ architecture (design intent)
 
-- **Sync:** keep IndexedDB authoritative per device. Add `deletedAt` tombstones and a per-device
-  outbox; the client pushes changed entities and pulls changes since a server cursor. Conflicts are
-  resolved per entity by `updatedAt` (last writer wins), which is safe because a round is normally
-  edited on one device. The API contract is generated as OpenAPI from the shared Zod schemas so web
-  and native clients share types.
-- **Backend:** authenticated API (managed OIDC; JWT verification at the edge) on serverless compute
-  (Lambda behind API Gateway or CloudFront) with a managed relational database; every query scoped
-  by `userId`. Same CloudFormation + OIDC deployment model, new stacks per environment.
+- **Accounts and sync:** see §13.1 (Google sign-in, API Gateway + Lambda + DynamoDB; ADR 0011).
 - **Native (Phase 3):** Expo/React Native apps importing `@golf-sg/shared`; SQLite on device with the
   same sync protocol. Language-neutral JSON test vectors guard any non-TypeScript port.
 - **AI gateway (Phase 5):** a service that owns provider keys, enforces per-user quotas and
@@ -346,3 +339,76 @@ Region `us-east-1` (CloudFront certificates must live there). Step-by-step: [dep
   calling user's SG data. Evaluations run in CI against fixed fixtures.
 - **Billing:** a single entitlement service fed by Stripe webhooks (web) and App Store / Play
   server notifications (mobile).
+
+### 13.1 Accounts and sync (FR-ACCT, FR-SYNC; ADR 0011)
+
+**Identity.** The web app loads Google Identity Services (`accounts.google.com/gsi/client`) only
+when a client ID is configured (`VITE_GOOGLE_CLIENT_ID`; FR-ACCT-05) and the golfer opens the
+Account page or was signed in before. Google returns an ID token (a JWT, 1 hour). The token stays
+in memory only; the profile (`sub`, email, name, picture) is cached in `localStorage` so the
+signed-in state shows offline. When the token expires the app asks GIS for a new one silently
+(`auto_select`); if that needs user interaction the status becomes "Sign in again to sync" and
+local use carries on. Native apps later use Google's iOS/Android SDKs (and Sign in with Apple on
+iOS) against the same API: the account key is the token's `iss` + `sub`.
+
+**Edge.** CloudFront routes `/api/*` to an API Gateway HTTP API in the same environment, so the
+browser calls a same-origin API (no CORS, CSP `connect-src 'self'`). The HTTP API's JWT authorizer
+checks signature (Google JWKS), `iss = https://accounts.google.com`, `aud = <client ID>` and
+expiry before any code runs. Routes:
+
+| Route                 | Body / query                          | Result                                                               |
+| --------------------- | ------------------------------------- | -------------------------------------------------------------------- |
+| `POST /api/sync`      | `{ changes: Change[] }` (max 100)     | `{ applied: string[], stale: string[], rejected: [{ id, reason }] }` |
+| `GET /api/sync`       | `?since=<cursor>` (omit = everything) | `{ changes: Change[], cursor }`                                      |
+| `DELETE /api/account` | none                                  | `204`; every item for the caller is deleted                          |
+
+`Change = { kind: 'round' | 'course', id, updatedAt, deletedAt: string | null, data?: Round | Course }`
+(shared Zod schema in `packages/shared/src/sync.ts`). A change with `deletedAt` is a tombstone and
+carries no data. Round data is validated with the same schemas and `roundIssues` as the app.
+
+**Storage.** One DynamoDB table (on-demand, point-in-time recovery, AWS-owned encryption):
+
+| Attribute   | Value                                                               |
+| ----------- | ------------------------------------------------------------------- |
+| `pk`        | `USER#<sub>` from the verified token, never from the request body   |
+| `sk`        | `ROUND#<id>` or `COURSE#<id>`                                       |
+| `updatedAt` | client timestamp used for last-writer-wins                          |
+| `deletedAt` | tombstone timestamp or absent                                       |
+| `syncedAt`  | server timestamp of the write; sort key of local index `bySyncedAt` |
+| `data`      | the entity JSON                                                     |
+
+Writes are conditional: `attribute_not_exists(pk) OR updatedAt < :incoming`, so an older change
+can never overwrite a newer one (it is reported as `stale` and the newer copy comes back on the next
+pull). Pull queries `bySyncedAt` for `syncedAt > since − 5 s` (overlap absorbs clock skew between
+concurrent Lambda writes; applying a change twice is harmless). Tombstones are kept so a device
+that was offline for months still learns about deletes. Every query uses the caller's `pk`, which
+is the per-user authorization (NFR-SEC-03).
+
+**Compute.** One Lambda function (Node.js 22, arm64), bundled with esbuild from `apps/sync`
+(`@golf-sg/sync`). The handler is a pure function of the request, the verified `sub` and a
+repository interface, so it is tested against an in-memory repository and DynamoDB Local.
+
+**Client.** Dexie version 3 adds `pending` (outbox keyed `kind:id`) and `meta` (sync cursor and
+the `sub` the device last synced as). Every local save, delete and backup import records a pending
+entry. The sync engine runs on sign-in, on the `online` event, when the tab becomes visible, a few
+seconds after a local change, and on "Sync now":
+
+1. Push pending entries (current entity, or a tombstone if it is gone), in batches of 100.
+2. Remove pending entries whose `updatedAt` did not change while the push was in flight.
+3. Pull since the stored cursor and apply each change if it is newer than the local copy and has
+   no newer pending local edit (last writer wins, FR-SYNC-04); tombstones delete locally.
+4. Store the new cursor and "last synced" time.
+
+First sign-in on a device (or as a different `sub`) marks every local entity pending, so existing
+rounds upload (FR-SYNC-01). Sign-out clears the cursor and optionally the local data (FR-ACCT-03).
+
+**Infrastructure.** `infra/cloudformation/api.yml` per environment (table, function, role, log
+groups, HTTP API, authorizer, routes, throttled stage). The Lambda bundle is uploaded to the
+bootstrap stack's artifact bucket. The web stack takes the API domain as a parameter and adds the
+`/api/*` behavior (caching disabled, all viewer headers except `Host` forwarded). Both API and
+behavior are skipped while the `GOOGLE_CLIENT_ID` repository variable is unset, so deploys keep
+working before the Google client exists.
+
+**CSP additions** (Google Identity Services): `script-src https://accounts.google.com/gsi/client`,
+`style-src https://accounts.google.com/gsi/style`, `frame-src https://accounts.google.com/gsi/`,
+`connect-src https://accounts.google.com/gsi/`, `img-src https://*.googleusercontent.com`.
