@@ -70,8 +70,17 @@ jobs:
           key="$ENVIRONMENT/sync-$SHA.zip"
           (cd apps/sync/dist && zip -q -X ../sync.zip index.mjs index.mjs.map)
           aws s3 cp apps/sync/sync.zip "s3://$bucket/$key" --only-show-errors
+          stack="golf-sg-api-$ENVIRONMENT"
+          # A failed first create leaves ROLLBACK_COMPLETE, which can only be deleted, not updated.
+          status=$(aws cloudformation describe-stacks --stack-name "$stack" \
+            --query 'Stacks[0].StackStatus' --output text 2>/dev/null || echo NONE)
+          if [[ "$status" == ROLLBACK_COMPLETE ]]; then
+            echo "Removing $stack left in ROLLBACK_COMPLETE by a failed first deploy"
+            aws cloudformation delete-stack --stack-name "$stack"
+            aws cloudformation wait stack-delete-complete --stack-name "$stack"
+          fi
           aws cloudformation deploy \
-            --stack-name "golf-sg-api-$ENVIRONMENT" \
+            --stack-name "$stack" \
             --template-file infra/cloudformation/api.yml \
             --role-arn "$EXECUTION_ROLE_ARN" \
             --capabilities CAPABILITY_NAMED_IAM \
@@ -82,9 +91,18 @@ jobs:
               "CodeBucket=$bucket" \
               "CodeKey=$key" \
             --tags app=golf-sg "environment=$ENVIRONMENT"
-          domain=$(aws cloudformation describe-stacks --stack-name "golf-sg-api-$ENVIRONMENT" \
+          domain=$(aws cloudformation describe-stacks --stack-name "$stack" \
             --query "Stacks[0].Outputs[?OutputKey=='ApiDomain'].OutputValue" --output text)
           echo "domain=$domain" >> "$GITHUB_OUTPUT"
+
+      - name: Show sync API stack failures
+        if: failure() && steps.api.outcome == 'failure'
+        env:
+          ENVIRONMENT: ${{ inputs.environment }}
+        run: |
+          aws cloudformation describe-stack-events --stack-name "golf-sg-api-$ENVIRONMENT" \
+            --max-items 40 --output table \
+            --query "StackEvents[?contains(ResourceStatus, 'FAILED')].[Timestamp,LogicalResourceId,ResourceStatus,ResourceStatusReason]" || true
 
       - name: Deploy infrastructure
         env:

@@ -421,6 +421,10 @@ Resources:
               - !Sub arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/${AppName}-web-dev/*
               - !Sub arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/${AppName}-api-dev/*
               - !Sub arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:changeSet/*
+          - Sid: CleanUpFailedApiStack
+            Effect: Allow
+            Action: cloudformation:DeleteStack
+            Resource: !Sub arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/${AppName}-api-dev/*
           - Sid: TemplateValidation
             Effect: Allow
             Action: cloudformation:ValidateTemplate
@@ -474,6 +478,10 @@ Resources:
               - !Sub arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/${AppName}-web-prod/*
               - !Sub arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/${AppName}-api-prod/*
               - !Sub arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:changeSet/*
+          - Sid: CleanUpFailedApiStack
+            Effect: Allow
+            Action: cloudformation:DeleteStack
+            Resource: !Sub arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/${AppName}-api-prod/*
           - Sid: TemplateValidation
             Effect: Allow
             Action: cloudformation:ValidateTemplate
