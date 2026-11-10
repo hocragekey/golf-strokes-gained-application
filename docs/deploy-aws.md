@@ -27,6 +27,24 @@ GitHub Actions ──OIDC──▶ golf-sg-deploy-<env> role ──passes──�
   - a no-cache rule for `index.html` and `sw.js` so phones pick up new releases
   - optionally, a custom domain with Route 53 aliases
 
+## Sign-in and sync API (optional)
+
+Google sign-in and sync (PRD §5.7, ADR 0011) ship only when `config/app.json` has a
+`googleClientId`. The client ID is public; it is not a secret. When it is set, the deploy job also:
+
+1. builds `apps/sync` and uploads the Lambda bundle to the bootstrap stack's artifact bucket
+   (`golf-sg-artifacts-<account>-<region>/<env>/sync-<sha>.zip`);
+2. deploys `infra/cloudformation/api.yml` as `golf-sg-api-<env>`: an API Gateway HTTP API with a
+   Google JWT authorizer, the sync Lambda, and a DynamoDB table (point-in-time recovery on; deletion
+   protection in prod);
+3. passes the API domain to `web.yml`, which adds an uncached `/api/*` CloudFront behavior so the
+   browser calls the API on the same origin;
+4. smoke-tests that `/api/sync` without a token returns 401.
+
+The Google OAuth client must list each site origin (e.g. the CloudFront URL and
+`http://localhost:5173`) under **Authorized JavaScript origins**. The deploy roles need the API
+permissions added to `bootstrap.yml`, so re-run `./scripts/aws-bootstrap.sh` once after upgrading.
+
 ## Quick setup (recommended)
 
 With short-lived admin credentials for the account (`aws sso login` or an STS session) and `gh`
@@ -110,5 +128,6 @@ region is simplest.
 - **Cost.** It is S3 storage plus CloudFront requests and transfer, so for a handful of users
   it should stay within or near the AWS free tier. Add an AWS Budget alert on the account
   anyway.
-- **Teardown.** Delete the `golf-sg-web-<env>` stacks. The buckets are retained (`DeletionPolicy:
+- **Teardown.** Delete the `golf-sg-web-<env>` and `golf-sg-api-<env>` stacks (prod's table has
+  deletion protection; turn it off first). The buckets are retained (`DeletionPolicy:
 Retain`), so empty and delete them afterwards. Delete `golf-sg-bootstrap` last.

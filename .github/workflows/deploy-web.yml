@@ -1,4 +1,4 @@
-name: Deploy web
+name: Deploy web and sync API
 
 on:
   workflow_call:
@@ -43,12 +43,47 @@ jobs:
           node-version-file: .nvmrc
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - id: config
+        name: Read app config
+        run: echo "google_client_id=$(jq -r '.googleClientId // ""' config/app.json)" >> "$GITHUB_OUTPUT"
       - run: pnpm --filter @golf-sg/web build
+      - if: steps.config.outputs.google_client_id != ''
+        run: pnpm --filter @golf-sg/sync build
 
       - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
         with:
           role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
+
+      # Sign-in and sync ship only when a Google client is configured (FR-ACCT-05).
+      - id: api
+        name: Deploy sync API
+        if: steps.config.outputs.google_client_id != ''
+        env:
+          ENVIRONMENT: ${{ inputs.environment }}
+          EXECUTION_ROLE_ARN: ${{ vars.AWS_CFN_EXECUTION_ROLE_ARN }}
+          GOOGLE_CLIENT_ID: ${{ steps.config.outputs.google_client_id }}
+          SHA: ${{ github.sha }}
+        run: |
+          account=$(aws sts get-caller-identity --query Account --output text)
+          bucket="golf-sg-artifacts-$account-$AWS_REGION"
+          key="$ENVIRONMENT/sync-$SHA.zip"
+          (cd apps/sync/dist && zip -q -X ../sync.zip index.mjs index.mjs.map)
+          aws s3 cp apps/sync/sync.zip "s3://$bucket/$key" --only-show-errors
+          aws cloudformation deploy \
+            --stack-name "golf-sg-api-$ENVIRONMENT" \
+            --template-file infra/cloudformation/api.yml \
+            --role-arn "$EXECUTION_ROLE_ARN" \
+            --no-fail-on-empty-changeset \
+            --parameter-overrides \
+              "Environment=$ENVIRONMENT" \
+              "GoogleClientId=$GOOGLE_CLIENT_ID" \
+              "CodeBucket=$bucket" \
+              "CodeKey=$key" \
+            --tags app=golf-sg "environment=$ENVIRONMENT"
+          domain=$(aws cloudformation describe-stacks --stack-name "golf-sg-api-$ENVIRONMENT" \
+            --query "Stacks[0].Outputs[?OutputKey=='ApiDomain'].OutputValue" --output text)
+          echo "domain=$domain" >> "$GITHUB_OUTPUT"
 
       - name: Deploy infrastructure
         env:
@@ -57,6 +92,7 @@ jobs:
           DOMAIN_NAME: ${{ vars.DOMAIN_NAME }}
           ACM_CERTIFICATE_ARN: ${{ vars.ACM_CERTIFICATE_ARN }}
           HOSTED_ZONE_ID: ${{ vars.HOSTED_ZONE_ID }}
+          API_DOMAIN: ${{ steps.api.outputs.domain }}
         run: |
           aws cloudformation deploy \
             --stack-name "$STACK_NAME" \
@@ -68,6 +104,7 @@ jobs:
               "DomainName=$DOMAIN_NAME" \
               "AcmCertificateArn=$ACM_CERTIFICATE_ARN" \
               "HostedZoneId=$HOSTED_ZONE_ID" \
+              "ApiDomain=$API_DOMAIN" \
             --tags app=golf-sg "environment=$ENVIRONMENT"
 
       - id: stack
@@ -110,3 +147,11 @@ jobs:
           curl -fsS --retry 5 --retry-all-errors "$URL/" | grep -q '<title>Golf Strokes Gained</title>'
           curl -fsS "$URL/rounds/new" | grep -q 'id="root"'
           curl -fsSI "$URL/sw.js" | grep -qi '^content-security-policy:'
+      - name: Smoke test sync API
+        if: steps.api.outputs.domain != ''
+        env:
+          URL: ${{ steps.stack.outputs.url }}
+        run: |
+          # Without a Google token the authorizer must refuse before the function runs.
+          code=$(curl -s -o /dev/null -w '%{http_code}' "$URL/api/sync")
+          test "$code" = 401

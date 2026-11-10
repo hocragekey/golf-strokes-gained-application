@@ -47,6 +47,64 @@ Resources:
       ClientIdList:
         - sts.amazonaws.com
 
+  # Lambda bundles, uploaded by the deploy roles under <env>/ and read by CloudFormation.
+  ArtifactBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Metadata:
+      checkov:
+        skip:
+          - id: CKV_AWS_18
+            comment: Build artifacts only; access logging is not needed.
+          - id: CKV_AWS_144
+            comment: Artifacts are reproducible from git; no cross-region replication.
+          - id: CKV_AWS_145
+            comment: SSE-S3 is sufficient for build artifacts.
+    Properties:
+      BucketName: !Sub ${AppName}-artifacts-${AWS::AccountId}-${AWS::Region}
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: BucketOwnerEnforced
+      VersioningConfiguration:
+        Status: Enabled
+      LifecycleConfiguration:
+        Rules:
+          - Id: expire-old-bundles
+            Status: Enabled
+            ExpirationInDays: 180
+            NoncurrentVersionExpiration:
+              NoncurrentDays: 30
+            AbortIncompleteMultipartUpload:
+              DaysAfterInitiation: 1
+
+  ArtifactBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref ArtifactBucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: DenyInsecureTransport
+            Effect: Deny
+            Principal: '*'
+            Action: s3:*
+            Resource:
+              - !GetAtt ArtifactBucket.Arn
+              - !Sub ${ArtifactBucket.Arn}/*
+            Condition:
+              Bool:
+                aws:SecureTransport: 'false'
+
   # Assumed by CloudFormation itself; each deploy role can only pass its own environment's role,
   # so a dev change set cannot touch the prod bucket.
   DevCfnExecutionRole:
@@ -80,6 +138,60 @@ Resources:
                 Action: s3:*
                 Resource:
                   - !Sub arn:${AWS::Partition}:s3:::${AppName}-web-dev-*
+        - PolicyName: sync-api
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Sid: Table
+                Effect: Allow
+                Action: dynamodb:*
+                Resource:
+                  - !Sub arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AppName}-api-dev
+                  - !Sub arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AppName}-api-dev/*
+              - Sid: Function
+                Effect: Allow
+                Action: lambda:*
+                Resource: !Sub arn:${AWS::Partition}:lambda:${AWS::Region}:${AWS::AccountId}:function:${AppName}-api-dev*
+              - Sid: FunctionRole
+                Effect: Allow
+                Action:
+                  - iam:CreateRole
+                  - iam:DeleteRole
+                  - iam:GetRole
+                  - iam:UpdateRole
+                  - iam:UpdateAssumeRolePolicy
+                  - iam:PutRolePolicy
+                  - iam:GetRolePolicy
+                  - iam:DeleteRolePolicy
+                  - iam:ListRolePolicies
+                  - iam:ListAttachedRolePolicies
+                  - iam:TagRole
+                  - iam:UntagRole
+                Resource: !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:role/${AppName}-api-dev-*
+              - Sid: PassFunctionRole
+                Effect: Allow
+                Action: iam:PassRole
+                Resource: !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:role/${AppName}-api-dev-*
+                Condition:
+                  StringEquals:
+                    iam:PassedToService: lambda.amazonaws.com
+              - Sid: LogGroups
+                Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:DeleteLogGroup
+                  - logs:PutRetentionPolicy
+                  - logs:DeleteRetentionPolicy
+                  - logs:TagResource
+                  - logs:UntagResource
+                  - logs:ListTagsForResource
+                Resource:
+                  - !Sub arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/${AppName}-api-dev*
+                  - !Sub arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/apigateway/${AppName}-api-dev*
+              - Sid: Code
+                Effect: Allow
+                Action: s3:GetObject
+                Resource: !Sub arn:${AWS::Partition}:s3:::${ArtifactBucket}/dev/*
 
   ProdCfnExecutionRole:
     Type: AWS::IAM::Role
@@ -112,6 +224,60 @@ Resources:
                 Action: s3:*
                 Resource:
                   - !Sub arn:${AWS::Partition}:s3:::${AppName}-web-prod-*
+        - PolicyName: sync-api
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Sid: Table
+                Effect: Allow
+                Action: dynamodb:*
+                Resource:
+                  - !Sub arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AppName}-api-prod
+                  - !Sub arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AppName}-api-prod/*
+              - Sid: Function
+                Effect: Allow
+                Action: lambda:*
+                Resource: !Sub arn:${AWS::Partition}:lambda:${AWS::Region}:${AWS::AccountId}:function:${AppName}-api-prod*
+              - Sid: FunctionRole
+                Effect: Allow
+                Action:
+                  - iam:CreateRole
+                  - iam:DeleteRole
+                  - iam:GetRole
+                  - iam:UpdateRole
+                  - iam:UpdateAssumeRolePolicy
+                  - iam:PutRolePolicy
+                  - iam:GetRolePolicy
+                  - iam:DeleteRolePolicy
+                  - iam:ListRolePolicies
+                  - iam:ListAttachedRolePolicies
+                  - iam:TagRole
+                  - iam:UntagRole
+                Resource: !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:role/${AppName}-api-prod-*
+              - Sid: PassFunctionRole
+                Effect: Allow
+                Action: iam:PassRole
+                Resource: !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:role/${AppName}-api-prod-*
+                Condition:
+                  StringEquals:
+                    iam:PassedToService: lambda.amazonaws.com
+              - Sid: LogGroups
+                Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:DeleteLogGroup
+                  - logs:PutRetentionPolicy
+                  - logs:DeleteRetentionPolicy
+                  - logs:TagResource
+                  - logs:UntagResource
+                  - logs:ListTagsForResource
+                Resource:
+                  - !Sub arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/${AppName}-api-prod*
+                  - !Sub arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/apigateway/${AppName}-api-prod*
+              - Sid: Code
+                Effect: Allow
+                Action: s3:GetObject
+                Resource: !Sub arn:${AWS::Partition}:s3:::${ArtifactBucket}/prod/*
 
   CfnSharedPolicy:
     Type: AWS::IAM::ManagedPolicy
@@ -150,6 +316,30 @@ Resources:
             Action:
               - acm:DescribeCertificate
               - acm:ListCertificates
+            Resource: '*'
+          - Sid: HttpApis
+            Effect: Allow
+            Action:
+              - apigateway:GET
+              - apigateway:POST
+              - apigateway:PUT
+              - apigateway:PATCH
+              - apigateway:DELETE
+            Resource:
+              - !Sub arn:${AWS::Partition}:apigateway:${AWS::Region}::/apis
+              - !Sub arn:${AWS::Partition}:apigateway:${AWS::Region}::/apis/*
+              - !Sub arn:${AWS::Partition}:apigateway:${AWS::Region}::/tags/*
+          - Sid: AccessLogDelivery
+            Effect: Allow
+            Action:
+              - logs:CreateLogDelivery
+              - logs:GetLogDelivery
+              - logs:UpdateLogDelivery
+              - logs:DeleteLogDelivery
+              - logs:ListLogDeliveries
+              - logs:PutResourcePolicy
+              - logs:DescribeResourcePolicies
+              - logs:DescribeLogGroups
             Resource: '*'
 
   DevDeployRole:
@@ -229,6 +419,7 @@ Resources:
               - cloudformation:GetTemplateSummary
             Resource:
               - !Sub arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/${AppName}-web-dev/*
+              - !Sub arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/${AppName}-api-dev/*
               - !Sub arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:changeSet/*
           - Sid: TemplateValidation
             Effect: Allow
@@ -251,6 +442,10 @@ Resources:
             Resource:
               - !Sub arn:${AWS::Partition}:s3:::${AppName}-web-dev-*
               - !Sub arn:${AWS::Partition}:s3:::${AppName}-web-dev-*/*
+          - Sid: UploadFunctionCode
+            Effect: Allow
+            Action: s3:PutObject
+            Resource: !Sub arn:${AWS::Partition}:s3:::${ArtifactBucket}/dev/*
           - Sid: Invalidate
             Effect: Allow
             Action:
@@ -277,6 +472,7 @@ Resources:
               - cloudformation:GetTemplateSummary
             Resource:
               - !Sub arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/${AppName}-web-prod/*
+              - !Sub arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/${AppName}-api-prod/*
               - !Sub arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:changeSet/*
           - Sid: TemplateValidation
             Effect: Allow
@@ -299,6 +495,10 @@ Resources:
             Resource:
               - !Sub arn:${AWS::Partition}:s3:::${AppName}-web-prod-*
               - !Sub arn:${AWS::Partition}:s3:::${AppName}-web-prod-*/*
+          - Sid: UploadFunctionCode
+            Effect: Allow
+            Action: s3:PutObject
+            Resource: !Sub arn:${AWS::Partition}:s3:::${ArtifactBucket}/prod/*
           - Sid: Invalidate
             Effect: Allow
             Action:
@@ -319,3 +519,6 @@ Outputs:
   ProdDeployRoleArn:
     Description: GitHub environment variable AWS_DEPLOY_ROLE_ARN for the prod environment
     Value: !GetAtt ProdDeployRole.Arn
+  ArtifactBucketName:
+    Description: Bucket for Lambda bundles (deploy workflow computes the same name)
+    Value: !Ref ArtifactBucket

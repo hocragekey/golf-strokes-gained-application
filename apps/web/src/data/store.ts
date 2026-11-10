@@ -1,15 +1,11 @@
 import {
   computeStats,
   getBaseline,
-  courseInputSchema,
   courseSchema,
   roundInputSchema,
   roundIssues,
   roundSchema,
   summarizeRound,
-  type Course,
-  type CourseHole,
-  type CourseInput,
   type EntryIssue,
   type Round,
   type RoundDetail,
@@ -17,9 +13,9 @@ import {
   type RoundSummary,
   type Stats,
 } from '@golf-sg/shared';
+import { changeKey, type SyncKind } from '@golf-sg/shared';
 import { z, type ZodType } from 'zod';
 import { GolfDb } from './db';
-import { backupV1Schema, roundFromV1 } from './legacy';
 
 export class StoreError extends Error {
   constructor(
@@ -56,17 +52,8 @@ const now = (): string => new Date().toISOString();
 const newestFirst = (a: Round, b: Round): number =>
   b.playedOn.localeCompare(a.playedOn) || b.createdAt.localeCompare(a.createdAt);
 
-const sameCourse = (c: Pick<Course, 'name' | 'tees'>, name: string, tees: string): boolean =>
-  c.name.trim().toLowerCase() === name.trim().toLowerCase() &&
-  c.tees.trim().toLowerCase() === tees.trim().toLowerCase();
-
 /** A round is usable once every played hole has a par and yardage. */
 const isComplete = (r: Round): boolean => r.layout.length === r.holes.length;
-
-/** Keeps holes the round didn't play (e.g. the back nine) from the previously saved layout. */
-function mergeLayout(saved: readonly CourseHole[], played: readonly CourseHole[]): CourseHole[] {
-  return [...played, ...saved.slice(played.length)];
-}
 
 /**
  * Local-first data access. Everything (validation, strokes gained, stats) runs on the device,
@@ -75,46 +62,9 @@ function mergeLayout(saved: readonly CourseHole[], played: readonly CourseHole[]
 export class LocalStore {
   constructor(readonly db: GolfDb = new GolfDb()) {}
 
-  listCourses(): Promise<Course[]> {
-    return this.db.courses.orderBy('name').toArray();
-  }
-
-  async getCourse(id: string): Promise<Course> {
-    const course = await this.db.courses.get(id);
-    if (!course) throw new StoreError('Course not found');
-    return course;
-  }
-
-  /** Finds a saved layout by name and tees (case-insensitive) to pre-fill a new round. */
-  async findCourse(name: string, tees = ''): Promise<Course | undefined> {
-    if (name.trim() === '') return undefined;
-    const courses = await this.db.courses.toArray();
-    return (
-      courses.find((c) => sameCourse(c, name, tees)) ??
-      courses.find((c) => sameCourse(c, name, c.tees))
-    );
-  }
-
-  async saveCourse(input: CourseInput, id?: string): Promise<Course> {
-    const data = parse(courseInputSchema, input);
-    if (id === undefined) {
-      const course: Course = {
-        id: crypto.randomUUID(),
-        ...data,
-        createdAt: now(),
-        updatedAt: now(),
-      };
-      await this.db.courses.add(course);
-      return course;
-    }
-    const course: Course = { ...(await this.getCourse(id)), ...data, updatedAt: now() };
-    await this.db.courses.put(course);
-    return course;
-  }
-
-  /** Saved courses are only shortcuts: rounds keep their own par and yardage. */
-  async deleteCourse(id: string): Promise<void> {
-    await this.db.courses.delete(id);
+  /** Records a local change in the sync outbox (pushed when signed in and online). */
+  private async track(kind: SyncKind, id: string, updatedAt: string, deleted = false) {
+    await this.db.pending.put({ key: changeKey(kind, id), kind, id, updatedAt, deleted });
   }
 
   private async rounds(limit?: number): Promise<Round[]> {
@@ -136,13 +86,14 @@ export class LocalStore {
     return { round, summary, holes: holeSg };
   }
 
-  /** Saves the round and remembers its course layout so the next round there is pre-filled. */
+  /** Saves the round with the par and yardage copied from the card. */
   async saveRound(input: RoundInput, id?: string): Promise<RoundDetail> {
     const data = parse(roundInputSchema, input);
     const issues = roundIssues(data.holes, data.layout);
     if (issues.length > 0) throw new StoreError('Scorecard has errors', issues);
 
-    const roundId = await this.db.transaction('rw', this.db.courses, this.db.rounds, async () => {
+    const tables = [this.db.rounds, this.db.pending];
+    const roundId = await this.db.transaction('rw', tables, async () => {
       const existing = id === undefined ? undefined : await this.db.rounds.get(id);
       if (id !== undefined && !existing) throw new StoreError('Round not found');
       const round: Round = {
@@ -152,34 +103,24 @@ export class LocalStore {
         updatedAt: now(),
       };
       await this.db.rounds.put(round);
-
-      if (data.courseName !== '') {
-        const saved = (await this.db.courses.toArray()).find((c) =>
-          sameCourse(c, data.courseName, data.tees),
-        );
-        const holes = mergeLayout(saved?.holes ?? [], data.layout);
-        await this.db.courses.put({
-          id: saved?.id ?? crypto.randomUUID(),
-          name: data.courseName,
-          tees: data.tees,
-          holes,
-          createdAt: saved?.createdAt ?? now(),
-          updatedAt: now(),
-        });
-      }
+      await this.track('round', round.id, round.updatedAt);
       return round.id;
     });
     return this.getRound(roundId);
   }
 
   async deleteRound(id: string): Promise<void> {
-    await this.db.rounds.delete(id);
+    await this.db.transaction('rw', this.db.rounds, this.db.pending, async () => {
+      await this.db.rounds.delete(id);
+      await this.track('round', id, now(), true);
+    });
   }
 
   async getStats(limit?: number, baselineId?: string): Promise<Stats> {
     return computeStats(await this.rounds(limit), getBaseline(baselineId));
   }
 
+  /** Everything stored on this device, as a versioned JSON document (FR-DATA-02). */
   async exportBackup(): Promise<Backup> {
     const [courses, rounds] = await Promise.all([
       this.db.courses.toArray(),
@@ -192,37 +133,5 @@ export class LocalStore {
       courses,
       rounds,
     };
-  }
-
-  /** Replaces all local data with the backup (v1 or v2) after validating it end to end. */
-  async importBackup(data: unknown): Promise<{ courses: number; rounds: number }> {
-    const backup = this.upgradeBackup(data);
-    for (const round of backup.rounds) {
-      const issues = roundIssues(round.holes, round.layout);
-      const numbered =
-        round.holes.every((h, i) => h.holeNumber === i + 1) &&
-        round.layout.every((h, i) => h.number === i + 1);
-      if (!numbered || round.layout.length !== round.holes.length || issues.length > 0) {
-        throw new StoreError(`Round ${round.playedOn} is invalid`, issues);
-      }
-    }
-    await this.db.transaction('rw', this.db.courses, this.db.rounds, async () => {
-      await Promise.all([this.db.courses.clear(), this.db.rounds.clear()]);
-      await this.db.courses.bulkPut(backup.courses);
-      await this.db.rounds.bulkPut(backup.rounds);
-    });
-    return { courses: backup.courses.length, rounds: backup.rounds.length };
-  }
-
-  private upgradeBackup(data: unknown): Backup {
-    const v1 = backupV1Schema.safeParse(data);
-    if (!v1.success) return parse(backupSchema, data);
-    const courses = new Map(v1.data.courses.map((c) => [c.id, c]));
-    const rounds = v1.data.rounds.map((round) => {
-      const course = courses.get(round.courseId);
-      if (!course) throw new StoreError(`Round ${round.playedOn} references a missing course`);
-      return roundFromV1(round, course);
-    });
-    return { ...v1.data, version: BACKUP_VERSION, rounds };
   }
 }

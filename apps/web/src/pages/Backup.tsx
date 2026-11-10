@@ -1,10 +1,8 @@
-import { useState, type ChangeEvent } from 'react';
+import { useState } from 'react';
 import { useStore } from '../data/context';
-import { useImportBackup } from '../data/hooks';
 
 export function Backup() {
   const store = useStore();
-  const importBackup = useImportBackup();
   const [message, setMessage] = useState<string | null>(null);
 
   async function handleExport() {
@@ -13,49 +11,27 @@ export function Backup() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `strokes-gained-backup-${backup.exportedAt.slice(0, 10)}.json`;
+    link.download = `strokes-gained-data-${backup.exportedAt.slice(0, 10)}.json`;
     link.click();
     URL.revokeObjectURL(url);
-    setMessage(`Exported ${backup.courses.length} courses and ${backup.rounds.length} rounds.`);
-  }
-
-  async function handleImport(event: ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
-    event.target.value = '';
-    if (!file) return;
-    if (!window.confirm('Importing replaces all courses and rounds on this device. Continue?')) {
-      return;
-    }
-    try {
-      const result = await importBackup.mutateAsync(JSON.parse(await file.text()) as unknown);
-      setMessage(`Imported ${result.courses} courses and ${result.rounds} rounds.`);
-    } catch (err) {
-      setMessage(`Import failed: ${err instanceof Error ? err.message : 'unknown error'}`);
-    }
+    setMessage(
+      `Downloaded ${String(backup.rounds.length)} round${backup.rounds.length === 1 ? '' : 's'}.`,
+    );
   }
 
   return (
     <section className="card stack">
       <div>
-        <h2>Backup &amp; restore</h2>
+        <h2>My data</h2>
         <p className="muted">
-          Your rounds are stored on this device and work without an internet connection. Export a
-          backup file regularly, or to move your data to another device.
+          Your rounds are stored on this device and work without an internet connection. Sign in to
+          keep them in your account across devices, or download a copy as a JSON file.
         </p>
       </div>
       <div className="actions">
         <button className="primary" onClick={() => void handleExport()}>
-          Export backup
+          Download my data
         </button>
-        <label className="button">
-          Import backup
-          <input
-            className="sr-only"
-            type="file"
-            accept="application/json,.json"
-            onChange={(e) => void handleImport(e)}
-          />
-        </label>
       </div>
       {message && <p role="status">{message}</p>}
     </section>

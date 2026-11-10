@@ -2,8 +2,8 @@
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "rootDir": ".",
-    "outDir": "dist",
+    "noEmit": true,
     "types": ["node"]
   },
-  "include": ["src", "test", "vitest.config.ts"]
+  "include": ["src", "vitest.config.ts", "build.ts"]
 }

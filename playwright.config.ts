@@ -16,20 +16,13 @@ export default defineConfig({
     screenshot: 'only-on-failure',
   },
   projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
-  // Runs the production build: the API serves the compiled SPA, exactly as in the container.
+  // Serves the production build (apps/web/dist) as static files, like S3 + CloudFront.
   webServer: process.env.E2E_BASE_URL
     ? undefined
     : {
-        command: 'node apps/api/dist/main.js',
-        url: `${baseURL}/api/ready`,
+        command: `pnpm --filter @golf-sg/web exec vite preview --host 127.0.0.1 --port ${String(PORT)} --strictPort`,
+        url: baseURL,
         reuseExistingServer: !process.env.CI,
         timeout: 30_000,
-        env: {
-          NODE_ENV: 'production',
-          PORT: String(PORT),
-          HOST: '127.0.0.1',
-          LOG_LEVEL: 'warn',
-          WEB_DIST_DIR: 'apps/web/dist',
-        },
       },
 });

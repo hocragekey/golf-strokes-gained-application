@@ -47,14 +47,12 @@ Requirements: Node (see [`.nvmrc`](.nvmrc)) and pnpm (see `packageManager` in
 
 ```bash
 pnpm install
-pnpm dev            # web on http://localhost:5173, API on :3000
+pnpm dev            # web on http://localhost:5173
+pnpm build && pnpm preview   # production build, served like S3 + CloudFront
 ```
 
-Or run the production container:
-
-```bash
-docker compose up --build   # http://localhost:3000
-```
+Sign-in and sync talk to the AWS API. To try them locally, point the dev server at a deployed
+environment: `VITE_API_PROXY_TARGET=https://d179dqlepdzlfu.cloudfront.net pnpm dev`.
 
 ## Repository layout
 
@@ -62,8 +60,8 @@ docker compose up --build   # http://localhost:3000
 | ----------------- | ---------------------------------------------------------------------------- |
 | `packages/shared` | Pure TS domain: Zod schemas, expected-strokes baselines, SG engine, insights |
 | `apps/web`        | React + Vite PWA; IndexedDB (Dexie) store; service worker via Workbox        |
-| `apps/api`        | Fastify server: serves the PWA and health checks (sync API comes in Phase 2) |
-| `infra`           | CloudFormation for AWS hosting (dev/prod)                                    |
+| `apps/sync`       | Sync API Lambda (push, pull, delete account) on API Gateway + DynamoDB       |
+| `infra`           | CloudFormation for AWS hosting and the sync API (dev/prod)                   |
 | `e2e`             | Playwright tests against the production build, including offline mode        |
 | `docs/adr`        | Architecture decision records                                                |
 

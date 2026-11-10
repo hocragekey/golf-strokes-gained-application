@@ -10,9 +10,6 @@ export function Rounds() {
       <div className="card-header">
         <h2>Rounds</h2>
         <span className="actions">
-          <Link className="button" to="/courses">
-            Saved courses
-          </Link>
           <Link className="button primary" to="/rounds/new">
             Enter round
           </Link>
