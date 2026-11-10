@@ -25,3 +25,5 @@ cloud credentials.
 - Hosting the PWA on Pages costs nothing and fits the local-first design (static files only).
 - When the sync API is introduced, a container deploy target (e.g. Cloud Run or Fly.io via OIDC)
   will be added as a separate environment with approval gates.
+- Update: the sync API shipped serverless on AWS (ADR 0011) and the GHCR container image was
+  removed (ADR 0012).

@@ -3,7 +3,8 @@ import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
 import { defineConfig } from 'vitest/config';
 
-const apiTarget = process.env.VITE_API_PROXY_TARGET ?? 'http://127.0.0.1:3000';
+// Optional: proxy /api to a deployed environment, e.g. https://d179dqlepdzlfu.cloudfront.net.
+const apiTarget = process.env.VITE_API_PROXY_TARGET;
 
 // Public, non-secret app configuration shared with the deploy workflow.
 const appConfig = JSON.parse(
@@ -52,7 +53,7 @@ export default defineConfig({
   resolve: { conditions: ['@golf-sg/source'] },
   server: {
     port: 5173,
-    proxy: { '/api': { target: apiTarget, changeOrigin: true } },
+    proxy: apiTarget ? { '/api': { target: apiTarget, changeOrigin: true } } : undefined,
   },
   build: { sourcemap: true, target: 'es2022' },
   test: {

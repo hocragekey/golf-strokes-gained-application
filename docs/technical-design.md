@@ -28,7 +28,9 @@ code and tests.
 - **One domain engine** (NFR-PORT-01): `packages/shared` is pure TypeScript with Zod as its only
   runtime dependency. The web app, the API, and future native apps import the same code.
 - **Static hosting** (ADR 0007): the production artifact is a static bundle on S3 + CloudFront per
-  environment. The Fastify API image exists for self-hosting and as the Phase 2 foundation.
+  environment.
+- **Serverless, AWS-native backend** (ADR 0012): the only server code is the sync Lambda behind
+  API Gateway; there is no app server or container.
 
 ## 2. Repository layout
 
@@ -38,7 +40,7 @@ code and tests.
 | `apps/web/src/data`        | `db.ts` (Dexie schema), `store.ts` (LocalStore), `hooks.ts` (queries), `preferences.ts`          |
 | `apps/web/src/pages`       | Route components: Dashboard, Rounds, RoundEntry, RoundDetail, CardGuide, Backup ("My data")      |
 | `apps/web/src/components`  | `Sg` (bars/values), `BaselineSelect`, `QrCode`, `OfflineBadge`, scorecard helpers                |
-| `apps/api/src`             | Fastify static host for the PWA plus health/readiness routes; no data endpoints or database      |
+| `apps/sync/src`            | Sync API Lambda: handler, DynamoDB repository (section 13.1)                                     |
 | `infra/cloudformation`     | `bootstrap.yml` (OIDC + IAM), `web.yml` (S3 + CloudFront per environment)                        |
 | `scripts/aws-bootstrap.sh` | One-command AWS + GitHub environment setup                                                       |
 | `e2e`                      | Playwright tests against the production build                                                    |
@@ -264,16 +266,13 @@ tab bar (FR-HOME-05).
 Form controls have labels or `aria-label`s, invalid cells set `aria-invalid`, and errors render
 with `role="alert"` (NFR-A11Y-01).
 
-## 8. API (self-hosted static host)
+## 8. Server
 
-Fastify with `@fastify/helmet` serves the built PWA in the container image, with SPA history
-fallback and JSON 404s under `/api`. It is stateless: the only endpoints are `GET /api/health`
-(liveness, used by the image `HEALTHCHECK`) and `GET /api/ready` (readiness, used by the CI smoke
-test). Tests assert that `/api/courses`, `/api/rounds` and `/api/stats` return 404.
-
-The earlier unauthenticated course/round/stats endpoints and their SQLite store were removed (PRD
-Q2, resolved in PRD 1.2). Any server-side data API must ship with authentication and per-user
-authorization (NFR-SEC-03); it returns as the Phase 2 sync service.
+There is no app server. S3 + CloudFront serve the PWA, and the only server code is the sync Lambda
+behind API Gateway (section 13.1, ADR 0011). The earlier Fastify static host and its container image
+were removed (ADR 0012); the even earlier unauthenticated course/round/stats endpoints went in PRD
+1.2 (Q2). Any server-side data API must ship with authentication and per-user authorization
+(NFR-SEC-03).
 
 ## 9. Infrastructure and deployment (NFR-SEC-01, NFR-OPS-01, NFR-COST-01)
 
@@ -290,12 +289,12 @@ Region `us-east-1` (CloudFront certificates must live there). Step-by-step: [dep
 ## 10. CI/CD and supply chain (NFR-QUAL-01, NFR-SEC-02)
 
 - **CI** (`ci.yml`): format check, lint, typecheck, unit/component tests with coverage thresholds,
-  build, Playwright E2E (incl. offline reload), Docker build + smoke, cfn-lint + checkov, and a
+  build, Playwright E2E (incl. offline reload), cfn-lint + checkov, and a
   single `CI OK` aggregate check for branch protection.
 - **Security** (`security.yml`, `codeql.yml`): dependency review, gitleaks, actionlint + zizmor,
-  CodeQL for TypeScript and Actions. Dependabot for npm, Actions, and Docker.
-- **Release** (`release.yml`): release-please (Conventional Commits → semver + changelog), multi-arch
-  GHCR image with SBOM and provenance, cosign keyless signing, then AWS deploys.
+  CodeQL for TypeScript and Actions. Dependabot for npm and Actions.
+- **Release** (`release.yml`): release-please (Conventional Commits → semver + changelog), then AWS
+  deploys.
 - **Pages** (`pages.yml`): publishes the static marketing/architecture page in `site/` to GitHub
   Pages on changes to `main` (ADR 0009). The app itself is never served from Pages.
 - All third-party actions are pinned to full commit SHAs; workflows default to `contents: read`,
@@ -308,7 +307,7 @@ Region `us-east-1` (CloudFront certificates must live there). Step-by-step: [dep
 | Domain     | Vitest                   | baselines (interpolation, scratch scaling), SG formulas and the sum invariant, validation rules, insights                               |
 | Data       | Vitest + fake-indexeddb  | LocalStore CRUD, data download, Dexie v1→v2 migration, baseline selection                                                               |
 | Components | Vitest + Testing Library | every page, including baseline switching, card guide, pocket sheet and QR                                                               |
-| API        | Vitest + Fastify inject  | health, static SPA fallback, data routes absent                                                                                         |
+| Sync API   | Vitest + DynamoDB Local  | handler auth/validation, push/pull/delete, conditional writes, tombstones, cursor paging, cross-user isolation                          |
 | End-to-end | Playwright               | production build: hero → guided round with no course setup (incl. card line) → SG → practice card; offline reload with data; card guide |
 | Infra      | cfn-lint, checkov        | template validity and security posture (skips justified inline)                                                                         |
 

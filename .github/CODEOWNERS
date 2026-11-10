@@ -1,6 +1,5 @@
 # Default owner for everything; CI/CD and security config always require owner review.
 *                 @hocragekey
 /.github/         @hocragekey
-/Dockerfile       @hocragekey
 /packages/shared/src/baseline.ts       @hocragekey
 /packages/shared/src/strokes-gained.ts @hocragekey

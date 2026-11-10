@@ -15,16 +15,7 @@ for confirmed issues.
 
 - Every GitHub Action is pinned to a full commit SHA; Dependabot proposes updates weekly.
 - Workflows default to `contents: read` and grant extra permissions per job.
-- Release images on GHCR are built with SBOM and SLSA provenance and signed keylessly with
-  Sigstore cosign. Verify with:
-
-```bash
-cosign verify ghcr.io/hocragekey/golf-strokes-gained-application:<version> \
-  --certificate-identity-regexp 'https://github.com/hocragekey/golf-strokes-gained-application/.github/workflows/release.yml@.*' \
-  --certificate-oidc-issuer https://token.actions.githubusercontent.com
-gh attestation verify oci://ghcr.io/hocragekey/golf-strokes-gained-application:<version> \
-  --repo hocragekey/golf-strokes-gained-application
-```
+- Deploys to AWS use GitHub OIDC with per-environment roles; no AWS keys are stored in GitHub.
 
 ## Data
 

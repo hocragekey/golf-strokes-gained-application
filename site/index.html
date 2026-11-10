@@ -970,7 +970,7 @@
               <div class="arrow">→</div>
               <div class="node">
                 <b>CI</b>Format, lint, typecheck, tests + coverage, build, Playwright incl. offline,
-                Docker, cfn-lint, checkov
+                cfn-lint, checkov
               </div>
               <div class="arrow">→</div>
               <div class="node">
@@ -1047,9 +1047,11 @@
                   </td>
                 </tr>
                 <tr>
-                  <td>Self-host container</td>
-                  <td>Fastify (stateless)</td>
-                  <td>Serves the PWA and health checks; stores no data until Phase 2 sync</td>
+                  <td>Sync API</td>
+                  <td>API Gateway, Lambda, DynamoDB</td>
+                  <td>
+                    Fully serverless: no app server, Google token checked before any code runs
+                  </td>
                 </tr>
                 <tr>
                   <td>Infrastructure</td>
