@@ -224,7 +224,11 @@ well inside NFR-PERF-01's 100 ms phone budget.
 - `navigator.storage.persist()` is requested at startup.
 - Hosting serves `index.html` and `sw.js` with no-cache and hashed assets as immutable, so a new
   release is picked up on the next launch while old clients keep loading their own assets.
-- Connectivity is never shown in the UI (FR-PWA-03 removed); sync retries on `online` and focus.
+- Connectivity is never shown in the UI (FR-PWA-03 removed); sync retries on `online`, on focus
+  and every 30 s after a failure while the app stays open.
+- Sign-out removes uploaded rounds and keeps only unsent ones (with their outbox) for the same
+  account's next sign-in. A different account signing in drops those leftovers instead of
+  uploading them into its own account.
 
 ### 7.4 Card guide and pocket sheet (FR-CARD-01..05)
 

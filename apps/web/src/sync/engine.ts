@@ -42,12 +42,15 @@ export class SyncEngine {
 
   /**
    * Called on sign-in. A device syncing for the first time (or as a different account) queues
-   * everything it holds, so existing rounds upload (FR-SYNC-01).
+   * everything it holds, so existing rounds upload (FR-SYNC-01). Unsent rounds another account left
+   * behind are dropped rather than uploaded into this one.
    */
   async adopt(sub: string): Promise<void> {
-    if ((await this.meta('syncedSub')) === sub) return;
+    const previous = await this.meta('syncedSub');
+    if (previous === sub) return;
     const tables = [this.db.rounds, this.db.courses, this.db.pending, this.db.meta];
     await this.db.transaction('rw', tables, async () => {
+      if (previous) await Promise.all([this.db.rounds.clear(), this.db.courses.clear()]);
       const queue = (kind: PendingChange['kind'], e: { id: string; updatedAt: string }) =>
         this.db.pending.put({
           key: changeKey(kind, e.id),
@@ -65,15 +68,19 @@ export class SyncEngine {
   }
 
   /**
-   * Called on sign-out (FR-ACCT-03). Keeping data keeps the outbox and sync state too, so unsent
-   * edits and deletes still upload when the same golfer signs back in. Removing data wipes it all;
-   * callers must make sure nothing is pending first.
+   * Called on sign-out (FR-ACCT-03). Uploaded data leaves the device; anything still pending stays,
+   * with its outbox and sync state, so it uploads when the same golfer signs back in.
    */
-  async reset(removeData: boolean): Promise<void> {
-    if (!removeData) return;
+  async signOut(): Promise<void> {
     const tables = [this.db.rounds, this.db.courses, this.db.pending, this.db.meta];
     await this.db.transaction('rw', tables, async () => {
-      await Promise.all(tables.map((t) => t.clear()));
+      const keep = new Set((await this.db.pending.toArray()).map((p) => p.key));
+      if (keep.size === 0) {
+        await Promise.all(tables.map((t) => t.clear()));
+        return;
+      }
+      await this.db.rounds.filter((r) => !keep.has(changeKey('round', r.id))).delete();
+      await this.db.courses.filter((c) => !keep.has(changeKey('course', c.id))).delete();
     });
   }
 
