@@ -395,6 +395,15 @@ function Scorecard({ existing }: { existing?: RoundDetail }) {
   const totalPar = played.reduce((a, _d, i) => a + (Number(layout[i]?.par) || 0), 0);
 
   async function finish() {
+    const unchecked = checkHoles.filter((h) => h <= holeCount);
+    const firstUnchecked = unchecked[0];
+    if (firstUnchecked !== undefined) {
+      setFormError(
+        `Check hole${unchecked.length === 1 ? '' : 's'} ${unchecked.join(', ')} from your photo first`,
+      );
+      startHole(firstUnchecked - 1);
+      return;
+    }
     const holes = Array.from({ length: holeCount }, (_, i) => holeLayout(i).hole);
     const result = validateCard(drafts.slice(0, holeCount), holes);
     setFormError(result.error);
