@@ -221,11 +221,10 @@ function holeLine(d: HoleDraft, par: number): string {
   const lie: Record<string, string> = { rough: 'r', sand: 's', recovery: 't', fairway: 'f' };
   const numbers: string[] = [];
   if (par !== 3) {
+    // The parser assumes rough after a drive missed left or right, fairway otherwise.
     const rough = d.teeResult === 'left' || d.teeResult === 'right';
-    const approachLie =
-      d.approachLie === 'fairway' || (rough && d.approachLie === 'rough')
-        ? ''
-        : (lie[d.approachLie] ?? '');
+    const assumed = rough ? 'rough' : 'fairway';
+    const approachLie = d.approachLie === assumed ? '' : (lie[d.approachLie] ?? '');
     numbers.push(`${d.approachYards || '?'}${approachLie}`);
   }
   if (Number(d.shortGameShots) > 0) {

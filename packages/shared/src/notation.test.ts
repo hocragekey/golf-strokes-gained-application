@@ -59,6 +59,11 @@ describe('parseHoleNotation', () => {
     expect(result.ok && result.fields.approachLie).toBe('sand');
   });
 
+  it('reads f as a fairway approach after a missed drive', () => {
+    const result = parseHoleNotation('4 L 2 150f / 20', 4);
+    expect(result.ok && result.fields.approachLie).toBe('fairway');
+  });
+
   it('turns a penalty drive into one penalty stroke', () => {
     const result = parseHoleNotation('5 X 2 150 / 18', 4);
     expect(result.ok && result.fields.penalties).toBe(1);

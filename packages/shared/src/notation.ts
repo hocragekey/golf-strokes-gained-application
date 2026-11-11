@@ -28,7 +28,7 @@ const DRIVE: Record<string, TeeResult> = {
   '✕': 'penalty',
   p: 'penalty',
 };
-const APPROACH_LIE = { r: 'rough', s: 'sand', t: 'recovery' } as const;
+const APPROACH_LIE = { f: 'fairway', r: 'rough', s: 'sand', t: 'recovery' } as const;
 const CHIP_LIE: Record<string, ShortGameLie> = { f: 'fairway', r: 'rough', s: 'sand' };
 
 /**
@@ -59,7 +59,7 @@ export function parseCardMarks(marks: CardMarks, par: number): NotationResult {
   let approachYards: number | null = null;
   let approachLie: NotationFields['approachLie'] = isPar3 ? 'tee' : 'fairway';
   if (!isPar3) {
-    const m = /^(\d+)([rst]?)$/.exec(items.shift() ?? '');
+    const m = /^(\d+)([frst]?)$/.exec(items.shift() ?? '');
     if (!m) return fail('Start the numbers with the approach yards, e.g. "165"');
     approachYards = Number(m[1]);
     const lie = m[2] as keyof typeof APPROACH_LIE | '';
