@@ -1,5 +1,9 @@
 #!/usr/bin/env bash
-# One-time AWS + GitHub setup for the dev/prod web deployments. See docs/deploy-aws.md.
+# One-time AWS + GitHub setup for the test/prod deployments. See docs/deploy-aws.md.
+#
+# Optional custom domain: DOMAIN=example.com (a Route 53 public zone must exist for it).
+# Prod is served at PROD_HOST (default: DOMAIN), the test environment at TEST_HOST
+# (default: test.DOMAIN).
 #
 # Needs: aws CLI v2 with short-lived admin credentials for the target account (SSO or STS),
 # gh CLI authenticated as a repository admin. Safe to re-run.
@@ -9,6 +13,9 @@ REPO="${REPO:-hocragekey/golf-strokes-gained-application}"
 REGION="${AWS_REGION:-us-east-1}"
 STACK="${STACK:-golf-sg-bootstrap}"
 REVIEWER="${PROD_REVIEWER:-}"
+DOMAIN="${DOMAIN:-}"
+PROD_HOST="${PROD_HOST:-$DOMAIN}"
+TEST_HOST="${TEST_HOST:-${DOMAIN:+test.$DOMAIN}}"
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 log() { printf '\n==> %s\n' "$*"; }
@@ -61,7 +68,7 @@ output() {
     --query "Stacks[0].Outputs[?OutputKey=='$1'].OutputValue" --output text
 }
 
-for env in dev prod; do
+for env in dev test prod; do
   Env="${env^}"
   log "Configuring GitHub environment $env"
   if [[ "$env" == prod ]]; then
@@ -80,8 +87,29 @@ for env in dev prod; do
     --body "$(output "${Env}CfnExecutionRoleArn")"
 done
 
+if [[ -n "$DOMAIN" ]]; then
+  log "Certificate for $PROD_HOST and $TEST_HOST"
+  zone="$(aws route53 list-hosted-zones-by-name --dns-name "$DOMAIN." --output text \
+    --query "HostedZones[?Name=='$DOMAIN.' && !Config.PrivateZone].Id | [0]")"
+  [[ -n "$zone" && "$zone" != None ]] || { echo "No public Route 53 zone for $DOMAIN" >&2; exit 1; }
+  zone="${zone##*/}"
+  aws cloudformation deploy --region us-east-1 --stack-name golf-sg-domain \
+    --template-file "$ROOT/infra/cloudformation/domain.yml" --no-fail-on-empty-changeset \
+    --parameter-overrides "ProdDomainName=$PROD_HOST" "TestDomainName=$TEST_HOST" \
+    "HostedZoneId=$zone"
+  cert="$(aws cloudformation describe-stacks --region us-east-1 --stack-name golf-sg-domain \
+    --query "Stacks[0].Outputs[?OutputKey=='CertificateArn'].OutputValue" --output text)"
+  for env in test prod; do
+    host="$PROD_HOST"
+    [[ "$env" == test ]] && host="$TEST_HOST"
+    gh variable set DOMAIN_NAME --repo "$REPO" --env "$env" --body "$host"
+    gh variable set ACM_CERTIFICATE_ARN --repo "$REPO" --env "$env" --body "$cert"
+    gh variable set HOSTED_ZONE_ID --repo "$REPO" --env "$env" --body "$zone"
+  done
+fi
+
 log "Enabling deployments"
 gh variable set AWS_REGION --repo "$REPO" --body "$REGION"
 gh variable set AWS_DEPLOY_ENABLED --repo "$REPO" --body true
 
-log "Done. Push to main (or re-run the Release workflow) to deploy dev."
+log "Done. Push to main (or re-run the Release workflow) to test and promote a build."

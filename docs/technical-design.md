@@ -20,7 +20,7 @@ code and tests.
                      │ Service worker (Workbox): precached app shell, offline navigation        │
                      └─────────────────────────────────────▲────────────────────────────────────┘
                                                            │ static files only (HTTPS)
-               AWS: CloudFront (OAC, headers, SPA rewrite) ─┴─ private S3 bucket   [dev | prod]
+               AWS: CloudFront (OAC, headers, SPA rewrite) ─┴─ private S3 bucket   [test | prod]
 ```
 
 - **Local-first** (ADR 0003): IndexedDB is the system of record; all computation runs on-device
@@ -34,17 +34,17 @@ code and tests.
 
 ## 2. Repository layout
 
-| Path                       | Responsibility                                                                                   |
-| -------------------------- | ------------------------------------------------------------------------------------------------ |
-| `packages/shared/src`      | `schemas.ts` (Zod contracts), `baseline.ts`, `strokes-gained.ts`, `validation.ts`, `insights.ts` |
-| `apps/web/src/data`        | `db.ts` (Dexie schema), `store.ts` (LocalStore), `hooks.ts` (queries), `preferences.ts`          |
-| `apps/web/src/pages`       | Route components: Dashboard, Rounds, RoundEntry, RoundDetail, CardGuide, Account                 |
-| `apps/web/src/components`  | `Sg` (bars/values), `BaselineSelect`, `QrCode`, scorecard helpers                                |
-| `apps/sync/src`            | Sync API Lambda: handler, DynamoDB repository (section 13.1)                                     |
-| `infra/cloudformation`     | `bootstrap.yml` (OIDC + IAM), `web.yml` (S3 + CloudFront per environment)                        |
-| `scripts/aws-bootstrap.sh` | One-command AWS + GitHub environment setup                                                       |
-| `e2e`                      | Playwright tests against the production build                                                    |
-| `site`                     | Static marketing and architecture page published to GitHub Pages (ADR 0009)                      |
+| Path                       | Responsibility                                                                                                                                                                                                                                                                                       |
+| -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `packages/shared/src`      | `schemas.ts` (Zod contracts), `baseline.ts`, `strokes-gained.ts`, `validation.ts`, `insights.ts`                                                                                                                                                                                                     |
+| `apps/web/src/data`        | `db.ts` (Dexie schema), `store.ts` (LocalStore), `hooks.ts` (queries), `preferences.ts`                                                                                                                                                                                                              |
+| `apps/web/src/pages`       | Route components: Dashboard, Rounds, RoundEntry, RoundDetail, CardGuide, Account                                                                                                                                                                                                                     |
+| `apps/web/src/components`  | `Sg` (bars/values), `BaselineSelect`, `QrCode`, scorecard helpers                                                                                                                                                                                                                                    |
+| `apps/sync/src`            | Sync API Lambda: handler, DynamoDB repository (section 13.1)                                                                                                                                                                                                                                         |
+| `infra/cloudformation`     | `bootstrap.yml` (OIDC + IAM), `web.yml` (S3 + CloudFront per environment)                                                                                                                                                                                                                            |
+| `scripts/aws-bootstrap.sh` | Deploys the bootstrap stack (reusing an existing OIDC provider), creates the `dev`/`test`/`prod` GitHub environments restricted to `main` with a prod reviewer, and sets all variables. With `DOMAIN` it also deploys `domain.yml` (ACM certificate for the prod and `test.` hostnames). Idempotent. |
+| `e2e`                      | Playwright tests against the production build                                                                                                                                                                                                                                                        |
+| `site`                     | Static marketing and architecture page published to GitHub Pages (ADR 0009)                                                                                                                                                                                                                          |
 
 Toolchain: Node (`.nvmrc`), pnpm workspaces, strict TypeScript, ESLint (type-checked, zero
 warnings), Prettier, Vitest, Playwright, Husky + lint-staged + commitlint. See
@@ -278,10 +278,10 @@ were removed (ADR 0012); the even earlier unauthenticated course/round/stats end
 
 | Component                  | Design                                                                                                                                                                                                                                                                                                                                                                  |
 | -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `bootstrap.yml` (once)     | GitHub OIDC provider (or reuse), `golf-sg-deploy-{dev,prod}` roles trusted only for `repo:<owner>/<repo>:environment:<env>`, and `golf-sg-cfn-execution-{dev,prod}` roles that only CloudFormation can assume. Each deploy role may only pass its own environment's execution role.                                                                                     |
+| `bootstrap.yml` (once)     | GitHub OIDC provider (or reuse), `golf-sg-deploy-{dev,test,prod}` roles trusted only for this repo's `<env>` GitHub environment, and `golf-sg-cfn-execution-{dev,test,prod}` roles that only CloudFormation can assume. Each deploy role may only pass its own execution role; only the test role may delete stacks, the site bucket and the table.                     |
 | `web.yml` (per env)        | Private, versioned, AES-256-encrypted S3 bucket, TLS-only policy, public access blocked; CloudFront with Origin Access Control, HTTPS redirect, HTTP/2+3, response headers policy (CSP, HSTS, nosniff, frame deny, referrer policy), CloudFront Function SPA rewrite, no-cache behaviors for `/index.html` and `/sw.js`; optional ACM certificate and Route 53 aliases. |
-| `deploy-web.yml`           | Reusable workflow: build → OIDC assume role → `cloudformation deploy` → `s3 sync` hashed assets immutable, app shell no-cache → CloudFront invalidation → smoke test (root, deep link, CSP header).                                                                                                                                                                     |
-| `release.yml`              | `deploy-dev` on every push to `main`; `deploy-prod` after a release is cut and dev succeeds, gated by the `prod` environment's required reviewer. Disabled until `AWS_DEPLOY_ENABLED=true`.                                                                                                                                                                             |
+| `deploy-web.yml`           | Reusable workflow: download the build artifact → OIDC assume role → `.github/actions/deploy-env` (API and web stacks, `s3 sync` with hashed assets immutable and the app shell no-cache, CloudFront invalidation, smoke tests).                                                                                                                                         |
+| `release.yml`              | Every push to `main`: `build-release.yml` builds once → `test-env.yml` creates the `test` environment from scratch, runs Playwright against it over HTTPS and tears it down (ADR 0013) → the same artifact is promoted to prod behind the `prod` environment's required reviewer. Disabled until `AWS_DEPLOY_ENABLED=true`.                                             |
 | `scripts/aws-bootstrap.sh` | Deploys the bootstrap stack (reusing an existing OIDC provider), creates the `dev`/`prod` GitHub environments restricted to `main` with a prod reviewer, and sets all variables. Idempotent.                                                                                                                                                                            |
 
 Region `us-east-1` (CloudFront certificates must live there). Step-by-step: [deploy-aws.md](deploy-aws.md).
@@ -293,8 +293,9 @@ Region `us-east-1` (CloudFront certificates must live there). Step-by-step: [dep
   single `CI OK` aggregate check for branch protection.
 - **Security** (`security.yml`, `codeql.yml`): dependency review, gitleaks, actionlint + zizmor,
   CodeQL for TypeScript and Actions. Dependabot for npm and Actions.
-- **Release** (`release.yml`): release-please (Conventional Commits → semver + changelog), then AWS
-  deploys.
+- **Release** (`release.yml`): release-please (Conventional Commits → semver + changelog); every
+  push to `main` is built once, tested in a throwaway AWS test environment with Playwright, torn
+  down, then promoted to prod (ADR 0013). `test-env-cleanup.yml` sweeps leftovers nightly.
 - **Pages** (`pages.yml`): publishes the static marketing/architecture page in `site/` to GitHub
   Pages on changes to `main` (ADR 0009). The app itself is never served from Pages.
 - All third-party actions are pinned to full commit SHAs; workflows default to `contents: read`,

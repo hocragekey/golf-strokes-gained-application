@@ -1,0 +1,50 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >-
+  Golf Strokes Gained - TLS certificate for the prod and test hostnames, validated through the
+  Route 53 zone. Deployed once per account by scripts/aws-bootstrap.sh. CloudFront only accepts
+  certificates from us-east-1.
+
+Parameters:
+  AppName:
+    Type: String
+    Default: golf-sg
+    AllowedPattern: '^[a-z][a-z0-9-]{1,20}$'
+  ProdDomainName:
+    Type: String
+    Description: Prod hostname, e.g. example.com or golf.example.com
+    AllowedPattern: '^([a-z0-9]([a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,}$'
+  TestDomainName:
+    Type: String
+    Description: Hostname of the throwaway test environment, e.g. test.example.com
+    AllowedPattern: '^([a-z0-9]([a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,}$'
+  HostedZoneId:
+    Type: AWS::Route53::HostedZone::Id
+    Description: Route 53 public hosted zone that serves both hostnames
+
+Rules:
+  CloudFrontRegion:
+    Assertions:
+      - Assert: !Equals [!Ref AWS::Region, us-east-1]
+        AssertDescription: CloudFront certificates must be issued in us-east-1
+
+Resources:
+  Certificate:
+    Type: AWS::CertificateManager::Certificate
+    Properties:
+      DomainName: !Ref ProdDomainName
+      SubjectAlternativeNames:
+        - !Ref TestDomainName
+      ValidationMethod: DNS
+      DomainValidationOptions:
+        - DomainName: !Ref ProdDomainName
+          HostedZoneId: !Ref HostedZoneId
+        - DomainName: !Ref TestDomainName
+          HostedZoneId: !Ref HostedZoneId
+      Tags:
+        - Key: app
+          Value: !Ref AppName
+
+Outputs:
+  CertificateArn:
+    Description: GitHub environment variable ACM_CERTIFICATE_ARN for test and prod
+    Value: !Ref Certificate
