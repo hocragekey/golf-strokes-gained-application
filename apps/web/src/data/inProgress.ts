@@ -1,6 +1,8 @@
+import { useMemo, useSyncExternalStore } from 'react';
 import type { HoleDraft, LayoutDraft } from '../components/scorecard';
 
 const KEY = 'golf-sg.round-in-progress';
+const CHANGE_EVENT = 'golf-sg:in-progress';
 
 /** A new round being entered hole by hole, kept on the device until it is saved or discarded. */
 export interface RoundInProgress {
@@ -13,23 +15,54 @@ export interface RoundInProgress {
   drafts: HoleDraft[];
   /** The hole on screen when the round was last saved (0-based). */
   hole?: number;
+  /** Holes filled from a photo that the golfer should still check (FR-CARD-06). */
+  check?: number[];
 }
 
-export function loadInProgress(): RoundInProgress | null {
+function parse(raw: string | null): RoundInProgress | null {
   try {
-    const value = JSON.parse(localStorage.getItem(KEY) ?? 'null') as RoundInProgress | null;
+    const value = JSON.parse(raw ?? 'null') as RoundInProgress | null;
     return value && Array.isArray(value.drafts) && Array.isArray(value.layout) ? value : null;
   } catch {
     return null;
   }
 }
 
-export function saveInProgress(round: RoundInProgress): void {
+export const loadInProgress = (): RoundInProgress | null => parse(localStorage.getItem(KEY));
+
+/** `quiet` is for the entry form's own saves, so only outside changes notify listeners. */
+export function saveInProgress(round: RoundInProgress, { quiet = false } = {}): void {
   localStorage.setItem(KEY, JSON.stringify(round));
+  if (!quiet) window.dispatchEvent(new Event(CHANGE_EVENT));
+}
+
+/** Calls `onChange` when something other than the entry form changes the round in progress. */
+export function onInProgressChange(onChange: () => void): () => void {
+  return subscribe(onChange);
 }
 
 export function clearInProgress(): void {
   localStorage.removeItem(KEY);
+  window.dispatchEvent(new Event(CHANGE_EVENT));
+}
+
+function subscribe(onChange: () => void): () => void {
+  window.addEventListener('storage', onChange);
+  window.addEventListener(CHANGE_EVENT, onChange);
+  return () => {
+    window.removeEventListener('storage', onChange);
+    window.removeEventListener(CHANGE_EVENT, onChange);
+  };
+}
+
+/** The round in progress, re-rendering when it changes (e.g. a photo read in the background). */
+export function useInProgress(): RoundInProgress | null {
+  const raw = useSyncExternalStore(
+    subscribe,
+    () => localStorage.getItem(KEY),
+    () => null,
+  );
+  return useMemo(() => parse(raw), [raw]);
 }
 
 /** Holes filled so far, counted from hole 1. */

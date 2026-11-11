@@ -1,5 +1,6 @@
+import { bedrockCardReader } from './card-reader.js';
 import { DynamoRepo } from './dynamo-repo.js';
-import { handle } from './handler.js';
+import { handle, type Services } from './handler.js';
 
 /** The parts of an API Gateway HTTP API (payload v2) event with a JWT authorizer that we use. */
 export interface HttpApiEvent {
@@ -20,6 +21,10 @@ export interface HttpApiResult {
 }
 
 const repo = new DynamoRepo(process.env.TABLE_NAME ?? '');
+const cardScanModelId = process.env.CARD_SCAN_MODEL_ID ?? '';
+const services: Services = cardScanModelId
+  ? { cardReader: bedrockCardReader(cardScanModelId) }
+  : {};
 
 export async function handler(event: HttpApiEvent): Promise<HttpApiResult> {
   const sub = event.requestContext.authorizer?.jwt?.claims?.sub;
@@ -37,6 +42,7 @@ export async function handler(event: HttpApiEvent): Promise<HttpApiResult> {
         userId: typeof sub === 'string' ? sub : '',
       },
       repo,
+      services,
     );
     return {
       statusCode: res.status,

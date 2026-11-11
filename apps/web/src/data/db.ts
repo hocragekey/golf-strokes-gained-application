@@ -1,4 +1,4 @@
-import type { Course, Round, SyncKind } from '@golf-sg/shared';
+import type { CardScanMediaType, Course, Round, SyncKind } from '@golf-sg/shared';
 import { Dexie, type EntityTable } from 'dexie';
 import { roundFromV1, type RoundV1 } from './legacy';
 
@@ -9,6 +9,15 @@ export interface PendingChange {
   id: string;
   updatedAt: string;
   deleted: boolean;
+}
+
+/** A scorecard photo waiting for signal to be read (FR-CARD-06); deleted once read. */
+export interface PendingScan {
+  id: string;
+  mediaType: CardScanMediaType;
+  /** Base64 JPEG, already shrunk for the reader. */
+  image: string;
+  createdAt: string;
 }
 
 export interface MetaEntry {
@@ -23,6 +32,7 @@ export class GolfDb extends Dexie {
   rounds!: EntityTable<Round, 'id'>;
   pending!: EntityTable<PendingChange, 'key'>;
   meta!: EntityTable<MetaEntry, 'key'>;
+  scans!: EntityTable<PendingScan, 'id'>;
 
   constructor(name = 'golf-sg') {
     super(name);
@@ -50,6 +60,14 @@ export class GolfDb extends Dexie {
       rounds: 'id, playedOn',
       pending: 'key',
       meta: 'key',
+    });
+    // v4: scorecard photos queued until there is signal.
+    this.version(4).stores({
+      courses: 'id, name',
+      rounds: 'id, playedOn',
+      pending: 'key',
+      meta: 'key',
+      scans: 'id',
     });
   }
 }

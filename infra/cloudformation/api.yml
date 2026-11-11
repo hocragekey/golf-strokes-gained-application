@@ -21,9 +21,15 @@ Parameters:
   CodeKey:
     Type: String
     Description: Object key of the Lambda bundle zip
+  CardScanModelId:
+    Type: String
+    Default: ''
+    Description: Bedrock model or inference profile that reads scorecard photos; empty switches card reading off
+    AllowedPattern: '^[a-zA-Z0-9.:_/-]*$'
 
 Conditions:
   IsProd: !Equals [!Ref Environment, prod]
+  HasCardScan: !Not [!Equals [!Ref CardScanModelId, '']]
 
 Resources:
   Table:
@@ -123,6 +129,20 @@ Resources:
                   - logs:CreateLogStream
                   - logs:PutLogEvents
                 Resource: !GetAtt FunctionLogGroup.Arn
+        - !If
+          - HasCardScan
+          - PolicyName: card-scan
+            PolicyDocument:
+              Version: '2012-10-17'
+              Statement:
+                # Cross-region inference profiles route to the model in several regions.
+                - Sid: ReadScorecards
+                  Effect: Allow
+                  Action: bedrock:InvokeModel
+                  Resource:
+                    - !Sub arn:${AWS::Partition}:bedrock:*::foundation-model/*
+                    - !Sub arn:${AWS::Partition}:bedrock:*:${AWS::AccountId}:inference-profile/*
+          - !Ref AWS::NoValue
 
   Function:
     Type: AWS::Lambda::Function
@@ -134,17 +154,17 @@ Resources:
           - id: CKV_AWS_116
             comment: Synchronous API; failures are returned to the client, which retries from its outbox.
           - id: CKV_AWS_117
-            comment: Talks only to DynamoDB over its public endpoint; no VPC resources.
+            comment: Talks only to DynamoDB and Bedrock over their public endpoints; no VPC resources.
           - id: CKV_AWS_173
-            comment: The only environment variables are the table name and Node options; no secrets.
+            comment: The only environment variables are the table name, model ID and Node options; no secrets.
     Properties:
       FunctionName: !Sub ${AppName}-api-${Environment}
-      Description: Per-user sync (push, pull, delete account)
+      Description: Per-user sync (push, pull, delete account) and scorecard photo reading
       Runtime: nodejs22.x
       Architectures: [arm64]
       Handler: index.handler
-      MemorySize: 256
-      Timeout: 15
+      MemorySize: 512
+      Timeout: 30
       Role: !GetAtt FunctionRole.Arn
       Code:
         S3Bucket: !Ref CodeBucket
@@ -152,6 +172,7 @@ Resources:
       Environment:
         Variables:
           TABLE_NAME: !Ref Table
+          CARD_SCAN_MODEL_ID: !Ref CardScanModelId
           NODE_OPTIONS: --enable-source-maps
       LoggingConfig:
         LogGroup: !Ref FunctionLogGroup
@@ -194,7 +215,7 @@ Resources:
       IntegrationType: AWS_PROXY
       IntegrationUri: !GetAtt Function.Arn
       PayloadFormatVersion: '2.0'
-      TimeoutInMillis: 15000
+      TimeoutInMillis: 30000
 
   PullRoute:
     Type: AWS::ApiGatewayV2::Route
@@ -210,6 +231,15 @@ Resources:
     Properties:
       ApiId: !Ref HttpApi
       RouteKey: POST /api/sync
+      AuthorizationType: JWT
+      AuthorizerId: !Ref GoogleAuthorizer
+      Target: !Sub integrations/${Integration}
+
+  CardScanRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref HttpApi
+      RouteKey: POST /api/card-scan
       AuthorizationType: JWT
       AuthorizerId: !Ref GoogleAuthorizer
       Target: !Sub integrations/${Integration}
