@@ -37,8 +37,6 @@ jobs:
     name: Build
     if: vars.AWS_DEPLOY_ENABLED == 'true'
     uses: ./.github/workflows/build-release.yml
-    with:
-      ref: ${{ github.sha }}
 
   test:
     name: Test environment
@@ -48,7 +46,6 @@ jobs:
       id-token: write
     uses: ./.github/workflows/test-env.yml
     with:
-      ref: ${{ github.sha }}
       artifact: ${{ needs.build.outputs.artifact }}
 
   # The prod GitHub environment's protection rules decide whether this waits for an approval.
@@ -61,5 +58,4 @@ jobs:
     uses: ./.github/workflows/deploy-web.yml
     with:
       environment: prod
-      ref: ${{ github.sha }}
       artifact: ${{ needs.build.outputs.artifact }}
