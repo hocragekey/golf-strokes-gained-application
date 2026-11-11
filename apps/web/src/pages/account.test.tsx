@@ -109,6 +109,20 @@ describe('Account page', () => {
     expect(await store.db.rounds.count()).toBe(0);
   });
 
+  it('removes uploaded rounds on sign-out even when the last upload fails', async () => {
+    const { store, server } = setup();
+    await store.saveRound(roundInput([par4]));
+    await userEvent.click(await screen.findByRole('button', { name: 'Fake Google' }));
+    await waitFor(() => {
+      expect(server.items.size).toBe(1);
+    });
+    server.api.push = () => Promise.reject(new Error('No signal'));
+    const unsent = await store.saveRound(roundInput([par4]));
+    await userEvent.click(screen.getByRole('button', { name: 'Sign out' }));
+    expect(await screen.findByRole('button', { name: 'Fake Google' })).toBeInTheDocument();
+    expect((await store.db.rounds.toArray()).map((r) => r.id)).toEqual([unsent.round.id]);
+  });
+
   it('keeps unsent rounds on sign-out and uploads them at the next sign-in', async () => {
     const { store, server } = setup();
     const push = server.api.push.bind(server.api);
