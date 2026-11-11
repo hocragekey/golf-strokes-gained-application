@@ -10,8 +10,11 @@ import {
   useState,
   type ReactNode,
 } from 'react';
+import type { CardScanRequest, CardScanResult } from '@golf-sg/shared';
 import type { GolfDb } from '../data/db';
 import { clearInProgress } from '../data/inProgress';
+import { cardScanEnabled } from '../scan/features';
+import { clearScanNotice, enqueueScan, processScans, SCAN_EVENT } from '../scan/queue';
 import { AuthRequiredError, httpSyncApi, type SyncApi } from '../sync/api';
 import { SyncEngine } from '../sync/engine';
 import type { AuthClient, Profile, Session } from './google';
@@ -33,9 +36,14 @@ export interface Account {
   signIn: (session: Session) => Promise<void>;
   signOut: () => Promise<void>;
   deleteAccount: () => Promise<void>;
+  /** Reads a scorecard photo now (needs signal and sign-in). */
+  scanCard: (scan: CardScanRequest) => Promise<CardScanResult>;
+  /** Keeps a photo on the device and reads it once there is signal. */
+  queueScan: (scan: CardScanRequest) => Promise<void>;
 }
 
 const noop = () => Promise.resolve();
+const signInFirst = () => Promise.reject(new AuthRequiredError());
 const disabled: Account = {
   enabled: false,
   profile: null,
@@ -44,6 +52,8 @@ const disabled: Account = {
   signIn: noop,
   signOut: noop,
   deleteAccount: noop,
+  scanCard: signInFirst,
+  queueScan: signInFirst,
 };
 
 const AccountContext = createContext<Account>(disabled);
@@ -182,6 +192,31 @@ export function AccountProvider({
     };
   }, [profile, sync]);
 
+  // Queued scorecard photos are read once signed in with signal (FR-CARD-06).
+  useEffect(() => {
+    if (!profile || !cardScanEnabled()) return;
+    let running = false;
+    const run = () => {
+      if (running || !navigator.onLine) return;
+      running = true;
+      void processScans(db, (scan) => api.scanCard(scan))
+        .catch(() => undefined)
+        .finally(() => {
+          running = false;
+        });
+    };
+    run();
+    window.addEventListener('online', run);
+    window.addEventListener(SCAN_EVENT, run);
+    return () => {
+      window.removeEventListener('online', run);
+      window.removeEventListener(SCAN_EVENT, run);
+    };
+  }, [profile, db, api]);
+
+  const scanCard = useCallback((scan: CardScanRequest) => api.scanCard(scan), [api]);
+  const queueScan = useCallback((scan: CardScanRequest) => enqueueScan(db, scan), [db]);
+
   const signIn = useCallback(
     async (s: Session) => {
       // The token switches only once the outbox belongs to this account, so a sync already in
@@ -207,10 +242,12 @@ export function AccountProvider({
     client.signOut();
     localStorage.removeItem(PROFILE_KEY);
     clearInProgress();
+    clearScanNotice();
+    await db.scans.clear();
     setProfile(null);
     setStatus((s) => ({ state: 'idle', pending: s.pending }));
     await queryClient.invalidateQueries();
-  }, [client, exclusive, engine, queryClient]);
+  }, [client, exclusive, engine, queryClient, db]);
 
   // Stable identity so the page renders Google's button once, not on every status change.
   const renderButton = useCallback(
@@ -240,9 +277,11 @@ export function AccountProvider({
             signIn,
             signOut,
             deleteAccount,
+            scanCard,
+            queueScan,
           }
         : disabled,
-    [client, profile, status, renderButton, signIn, signOut, deleteAccount],
+    [client, profile, status, renderButton, signIn, signOut, deleteAccount, scanCard, queueScan],
   );
   return <AccountContext value={value}>{children}</AccountContext>;
 }

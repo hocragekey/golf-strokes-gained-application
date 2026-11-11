@@ -102,3 +102,59 @@ describe('lambda adapter', () => {
     expect((await handler(event())).statusCode).toBe(401);
   });
 });
+
+describe('card scan route', () => {
+  const photo = Buffer.from('fake jpeg bytes').toString('base64');
+  const scan = (body: unknown) =>
+    req({ method: 'POST', path: '/api/card-scan', body: JSON.stringify(body) });
+  const result = {
+    courseName: 'Pebble Creek',
+    tees: 'Blue',
+    holes: [
+      {
+        number: 1,
+        par: 4,
+        yardage: 410,
+        score: 4,
+        drive: 'R',
+        putts: 1,
+        stats: '175 / s15 / 8',
+        unsure: false,
+      },
+    ],
+  };
+
+  it('is off until a reader is configured', async () => {
+    const res = await handle(scan({ mediaType: 'image/jpeg', image: photo }), new MemoryRepo());
+    expect(res.status).toBe(503);
+  });
+
+  it('passes the photo to the reader and returns the validated marks', async () => {
+    const seen: [Uint8Array, string][] = [];
+    const res = await handle(scan({ mediaType: 'image/jpeg', image: photo }), new MemoryRepo(), {
+      cardReader: {
+        read: (image, mediaType) => {
+          seen.push([image, mediaType]);
+          return Promise.resolve(result);
+        },
+      },
+    });
+    expect(res).toEqual({ status: 200, body: result });
+    expect(Buffer.from(seen[0]?.[0] ?? []).toString()).toBe('fake jpeg bytes');
+    expect(seen[0]?.[1]).toBe('image/jpeg');
+  });
+
+  it('rejects bad requests and unreadable answers', async () => {
+    const cardReader = { read: () => Promise.resolve({ nonsense: true }) };
+    const bad = await handle(scan({ mediaType: 'image/gif', image: photo }), new MemoryRepo(), {
+      cardReader,
+    });
+    expect(bad.status).toBe(400);
+    const unreadable = await handle(
+      scan({ mediaType: 'image/png', image: photo }),
+      new MemoryRepo(),
+      { cardReader },
+    );
+    expect(unreadable.status).toBe(502);
+  });
+});

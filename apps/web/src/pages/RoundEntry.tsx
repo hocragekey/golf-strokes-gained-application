@@ -5,6 +5,7 @@ import {
   parseHoleNotation,
   SHORT_GAME_LIES,
   TEE_RESULTS,
+  type CardScanResult,
   type RoundDetail,
 } from '@golf-sg/shared';
 import { useEffect, useState, type ReactNode } from 'react';
@@ -30,6 +31,9 @@ import {
   type RoundInProgress,
 } from '../data/inProgress';
 import { formatToPar } from '../format';
+import { applyScan } from '../scan/apply';
+import { cardScanEnabled } from '../scan/features';
+import { PhotoImport } from '../scan/PhotoImport';
 
 const LABELS: Record<string, string> = {
   fairway: 'Fairway',
@@ -247,7 +251,9 @@ interface Position {
 
 /** Back to the hole the golfer was on if it isn't finished, otherwise the next blank hole. */
 function resumePosition(round: RoundInProgress): Position {
-  const { drafts, holeCount, hole: at } = round;
+  const { drafts, holeCount, hole: at, check = [] } = round;
+  const first = check[0];
+  if (first !== undefined) return { hole: first - 1, step: 'review' };
   if (at !== undefined) {
     const draft = drafts[at] ?? emptyDraft();
     if (isBlank(draft)) return { hole: at, step: 'layout' };
@@ -286,6 +292,9 @@ function Scorecard({ existing }: { existing?: RoundDetail }) {
   const [pos, setPos] = useState<Position>(() =>
     resumed ? resumePosition(resumed) : { hole: 0, step: 'details' },
   );
+  // Holes filled from a photo that still need a look; each is cleared once visited.
+  const [checkHoles, setCheckHoles] = useState<number[]>(() => resumed?.check ?? []);
+  const [photoNote, setPhotoNote] = useState<string | null>(null);
   const [cardLine, setCardLine] = useState('');
   const [lineError, setLineError] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
@@ -302,8 +311,9 @@ function Scorecard({ existing }: { existing?: RoundDetail }) {
       layout,
       drafts,
       hole: pos.step === 'details' ? undefined : pos.hole,
+      check: checkHoles,
     });
-  }, [existing, courseName, tees, playedOn, notes, holeCount, layout, drafts, pos]);
+  }, [existing, courseName, tees, playedOn, notes, holeCount, layout, drafts, pos, checkHoles]);
 
   // Keep the screen on while entering holes on the course, where supported.
   useEffect(() => {
@@ -343,6 +353,7 @@ function Scorecard({ existing }: { existing?: RoundDetail }) {
     const filled = !isBlank(drafts[hole] ?? emptyDraft());
     setCardLine('');
     setLineError(null);
+    setCheckHoles((c) => c.filter((h) => h !== hole + 1));
     setPos({ hole, step: filled ? 'review' : known ? 'score' : 'layout' });
   };
   const goTo = (step: Step) => {
@@ -366,6 +377,7 @@ function Scorecard({ existing }: { existing?: RoundDetail }) {
   const status = (i: number): 'done' | 'error' | 'todo' => {
     const d = drafts[i] ?? emptyDraft();
     if (isBlank(d)) return 'todo';
+    if (checkHoles.includes(i + 1)) return 'error';
     if (i === pos.hole && pos.step !== 'review' && pos.step !== 'details') return 'todo';
     const { hole } = holeLayout(i);
     return hole && validateRow(d, hole).entry ? 'done' : 'error';
@@ -405,6 +417,27 @@ function Scorecard({ existing }: { existing?: RoundDetail }) {
     }
   }
 
+  const applyPhoto = (scan: CardScanResult) => {
+    const { round, check } = applyScan(
+      { courseName, tees, playedOn, notes, holeCount, layout, drafts, check: checkHoles },
+      scan,
+    );
+    setCourseName(round.courseName);
+    setTees(round.tees);
+    setHoleCount(round.holeCount);
+    setLayout(round.layout);
+    setDrafts(round.drafts);
+    const toCheck = round.check ?? [];
+    setCheckHoles(toCheck);
+    setPhotoNote(
+      check.length > 0
+        ? 'Filled from your photo. Check the highlighted holes.'
+        : 'Filled from your photo. Check each hole, then save.',
+    );
+    const first = toCheck[0] ?? 1;
+    setPos({ hole: first - 1, step: 'review' });
+  };
+
   const applyLine = () => {
     const parsed = parseHoleNotation(cardLine, par);
     if (!parsed.ok) {
@@ -437,6 +470,7 @@ function Scorecard({ existing }: { existing?: RoundDetail }) {
             Start on the first tee and enter each hole as you finish it, or copy your card after the
             round. We&apos;ll ask for each hole&apos;s par and yardage as you go.
           </p>
+          {!existing && cardScanEnabled() && <PhotoImport onRead={applyPhoto} />}
           <div className="row">
             <label className="field grow">
               <span>Course (optional)</span>
@@ -508,6 +542,8 @@ function Scorecard({ existing }: { existing?: RoundDetail }) {
                 type="button"
                 onClick={() => {
                   clearInProgress();
+                  setCheckHoles([]);
+                  setPhotoNote(null);
                   setDrafts(Array.from({ length: 18 }, emptyDraft));
                   setLayout(Array.from({ length: 18 }, emptyLayout));
                   setCourseName('');
@@ -863,6 +899,11 @@ function Scorecard({ existing }: { existing?: RoundDetail }) {
                 : ''}
             </span>
           </div>
+        )}
+        {photoNote && pos.step !== 'details' && (
+          <p className="ok" role="status">
+            {photoNote}
+          </p>
         )}
         <section className="card question-card">{body}</section>
         {pos.step !== 'details' && pos.step !== 'review' && (

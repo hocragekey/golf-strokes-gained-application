@@ -9,15 +9,20 @@ const apiTarget = process.env.VITE_API_PROXY_TARGET;
 // Public, non-secret app configuration shared with the deploy workflow.
 const appConfig = JSON.parse(
   readFileSync(new URL('../../config/app.json', import.meta.url), 'utf8'),
-) as { googleClientId?: string };
+) as { googleClientId?: string; cardScanModelId?: string };
 const googleClientId = process.env.VITE_GOOGLE_CLIENT_ID ?? appConfig.googleClientId ?? '';
+// Scorecard photo reading appears only once the API has a model to read with (FR-CARD-06).
+const cardScan = (appConfig.cardScanModelId ?? '') !== '' && googleClientId !== '';
 
 // Set VITE_BASE when hosting under a sub-path, e.g. GitHub Pages project sites.
 const base = process.env.VITE_BASE ?? '/';
 
 export default defineConfig({
   base,
-  define: { 'import.meta.env.VITE_GOOGLE_CLIENT_ID': JSON.stringify(googleClientId) },
+  define: {
+    'import.meta.env.VITE_GOOGLE_CLIENT_ID': JSON.stringify(googleClientId),
+    'import.meta.env.VITE_CARD_SCAN': JSON.stringify(cardScan ? 'true' : ''),
+  },
   plugins: [
     react(),
     VitePWA({
