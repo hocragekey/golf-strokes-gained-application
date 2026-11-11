@@ -246,8 +246,17 @@ describe('RoundEntry', () => {
     await user.click(button('4 Bogey'));
     second.unmount();
 
-    renderWithProviders(<RoundEntry />, { route: '/rounds/new', path: '/rounds/new' });
+    const third = renderWithProviders(<RoundEntry />, {
+      route: '/rounds/new',
+      path: '/rounds/new',
+    });
     expect(await screen.findByRole('heading', { name: 'Hole 1 summary' })).toBeInTheDocument();
+    await user.click(button('Details'));
+    await user.type(screen.getByLabelText('Course (optional)'), 'Pebble Creek');
+    third.unmount();
+    expect(JSON.parse(localStorage.getItem('golf-sg.round-in-progress') ?? '{}')).toMatchObject({
+      courseName: 'Pebble Creek',
+    });
   });
 });
 

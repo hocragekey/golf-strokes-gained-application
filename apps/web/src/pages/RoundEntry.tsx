@@ -292,7 +292,9 @@ function Scorecard({ existing }: { existing?: RoundDetail }) {
 
   useEffect(() => {
     // Saved from the first hole on, so nothing typed is lost if the phone closes the app.
-    if (existing || (pos.step === 'details' && drafts.every(isBlank))) return;
+    // Once a round is on the device, later edits to its details are saved too.
+    const untouched = pos.step === 'details' && drafts.every(isBlank) && !loadInProgress();
+    if (existing || untouched) return;
     saveInProgress({
       courseName,
       tees,
