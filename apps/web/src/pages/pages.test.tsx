@@ -142,10 +142,10 @@ describe('RoundEntry', () => {
     expect(
       screen.getByRole('heading', { name: 'Did you chip, pitch or play from a bunker?' }),
     ).toBeVisible();
+    await user.click(button('Short'));
     await user.click(button('1'));
     await user.type(screen.getByLabelText('Short-game yards'), '15');
     await user.click(button('Bunker'));
-    await user.click(button('Short'));
     await user.click(button('Next'));
     await user.click(button('1'));
     await user.type(screen.getByLabelText('First putt'), '4');

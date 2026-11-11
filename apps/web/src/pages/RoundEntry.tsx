@@ -649,6 +649,16 @@ function Scorecard({ existing }: { existing?: RoundDetail }) {
           title="Did you chip, pitch or play from a bunker?"
           help="Shots from within about 50 yards that didn't start on the green."
         >
+          <fieldset className="field">
+            <legend>Missed the green? (optional, pick before answering)</legend>
+            <Choices
+              options={MISS_DIRECTIONS}
+              selected={draft.missDirection || null}
+              onPick={(v) => {
+                update({ missDirection: draft.missDirection === v ? '' : v });
+              }}
+            />
+          </fieldset>
           <Choices
             options={['0', '1', '2', '3', '4']}
             more={10}
@@ -657,7 +667,7 @@ function Scorecard({ existing }: { existing?: RoundDetail }) {
             onPick={(v) => {
               update({
                 shortGameShots: v,
-                ...(v === '0' ? { shortGameYards: '', shortGameLie: '', missDirection: '' } : {}),
+                ...(v === '0' ? { shortGameYards: '', shortGameLie: '' } : {}),
               });
               if (v === '0') next();
             }}
@@ -681,16 +691,6 @@ function Scorecard({ existing }: { existing?: RoundDetail }) {
                   selected={draft.shortGameLie || 'fairway'}
                   onPick={(v) => {
                     update({ shortGameLie: v });
-                  }}
-                />
-              </fieldset>
-              <fieldset className="field">
-                <legend>Missed the green (optional)</legend>
-                <Choices
-                  options={MISS_DIRECTIONS}
-                  selected={draft.missDirection || null}
-                  onPick={(v) => {
-                    update({ missDirection: draft.missDirection === v ? '' : v });
                   }}
                 />
               </fieldset>
