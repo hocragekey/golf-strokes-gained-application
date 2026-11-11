@@ -60,6 +60,8 @@ const AccountContext = createContext<Account>(disabled);
 const PROFILE_KEY = 'golf-sg:profile';
 /** Debounce between a local change and pushing it. */
 const SYNC_DELAY_MS = 2000;
+/** Wait before retrying queued scorecard photos after a failure while online. */
+const SCAN_RETRY_MS = 60_000;
 /** Wait before retrying a failed sync while the app stays open (FR-SYNC-05). */
 const RETRY_DELAY_MS = 30_000;
 
@@ -197,15 +199,21 @@ export function AccountProvider({
     if (!profile || !cardScanEnabled()) return;
     const sub = profile.sub;
     let running = false;
+    let retry: ReturnType<typeof setTimeout> | undefined;
     const run = () => {
       if (running || !navigator.onLine) return;
       running = true;
+      clearTimeout(retry);
       void processScans(
         db,
         (scan) => api.scanCard(scan),
         () => profileRef.current?.sub === sub,
       )
         .catch(() => undefined)
+        .then(async () => {
+          // Photos still queued while online hit a server or network error: try again later.
+          if ((await db.scans.count()) > 0) retry = setTimeout(run, SCAN_RETRY_MS);
+        })
         .finally(() => {
           running = false;
         });
@@ -214,6 +222,7 @@ export function AccountProvider({
     window.addEventListener('online', run);
     window.addEventListener(SCAN_EVENT, run);
     return () => {
+      clearTimeout(retry);
       window.removeEventListener('online', run);
       window.removeEventListener(SCAN_EVENT, run);
     };
