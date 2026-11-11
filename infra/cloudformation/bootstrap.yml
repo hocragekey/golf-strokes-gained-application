@@ -281,6 +281,12 @@ Resources:
 
   CfnSharedPolicy:
     Type: AWS::IAM::ManagedPolicy
+    Metadata:
+      cfn-lint:
+        config:
+          ignore_checks:
+            # apigateway:TagResource is required to tag HTTP API stages but is missing from cfn-lint's action list.
+            - W3037
     Properties:
       ManagedPolicyName: !Sub ${AppName}-cfn-execution-shared
       PolicyDocument:
@@ -325,6 +331,8 @@ Resources:
               - apigateway:PUT
               - apigateway:PATCH
               - apigateway:DELETE
+              - apigateway:TagResource
+              - apigateway:UntagResource
             Resource:
               - !Sub arn:${AWS::Partition}:apigateway:${AWS::Region}::/apis
               - !Sub arn:${AWS::Partition}:apigateway:${AWS::Region}::/apis/*
@@ -421,6 +429,10 @@ Resources:
               - !Sub arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/${AppName}-web-dev/*
               - !Sub arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/${AppName}-api-dev/*
               - !Sub arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:changeSet/*
+          - Sid: CleanUpFailedApiStack
+            Effect: Allow
+            Action: cloudformation:DeleteStack
+            Resource: !Sub arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/${AppName}-api-dev/*
           - Sid: TemplateValidation
             Effect: Allow
             Action: cloudformation:ValidateTemplate
@@ -474,6 +486,10 @@ Resources:
               - !Sub arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/${AppName}-web-prod/*
               - !Sub arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/${AppName}-api-prod/*
               - !Sub arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:changeSet/*
+          - Sid: CleanUpFailedApiStack
+            Effect: Allow
+            Action: cloudformation:DeleteStack
+            Resource: !Sub arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/${AppName}-api-prod/*
           - Sid: TemplateValidation
             Effect: Allow
             Action: cloudformation:ValidateTemplate

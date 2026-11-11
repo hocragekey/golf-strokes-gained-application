@@ -28,7 +28,7 @@ Conditions:
 Resources:
   Table:
     Type: AWS::DynamoDB::Table
-    DeletionPolicy: Retain
+    DeletionPolicy: RetainExceptOnCreate
     UpdateReplacePolicy: Retain
     Metadata:
       checkov:
