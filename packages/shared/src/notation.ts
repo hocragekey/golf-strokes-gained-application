@@ -1,114 +1,128 @@
-import type {
-  ApproachLie,
-  HoleEntryInput,
-  MissDirection,
-  ShortGameLie,
-  TeeResult,
-} from './schemas.js';
+import type { HoleEntryInput, ShortGameLie, TeeResult } from './schemas.js';
 
-/** Fields a one-line card notation can fill; the hole number and par come from the scorecard. */
+/** Fields a hole's card marks can fill; the hole number and par come from the scorecard. */
 export type NotationFields = Omit<HoleEntryInput, 'holeNumber'>;
 
 export type NotationResult = { ok: true; fields: NotationFields } | { ok: false; error: string };
 
-const TEE: Record<string, TeeResult> = {
+/** What the golfer writes for one hole on the two-row card (see the card guide). */
+export interface CardMarks {
+  score: number;
+  /** Drive arrow or letter: ↑/F fairway, ←/L left, →/R right, ↓/S short, ✕/X/P penalty. */
+  drive: string | null;
+  putts: number;
+  /** Spare row: `approach yards / chip / first-putt feet`, e.g. `175 / s15 / 8`. */
+  stats: string;
+}
+
+const DRIVE: Record<string, TeeResult> = {
   f: 'fairway',
+  '↑': 'fairway',
   l: 'left',
+  '←': 'left',
   r: 'right',
+  '→': 'right',
   s: 'short',
+  '↓': 'short',
+  x: 'penalty',
+  '✕': 'penalty',
   p: 'penalty',
 };
-const APPROACH_LIE: Record<string, ApproachLie> = {
-  '': 'fairway',
-  r: 'rough',
-  s: 'sand',
-  t: 'recovery',
-};
-const SHORT_LIE: Record<string, ShortGameLie> = {
-  '': 'fairway',
-  f: 'fringe',
-  r: 'rough',
-  s: 'sand',
-};
-const MISS: Record<string, MissDirection> = { l: 'left', r: 'right', lg: 'long', sh: 'short' };
-const GIR = new Set(['✓', '✔', 'v', 'g', 'gir']);
+const APPROACH_LIE = { r: 'rough', s: 'sand', t: 'recovery' } as const;
+const CHIP_LIE: Record<string, ShortGameLie> = { f: 'fairway', r: 'rough', s: 'sand' };
 
 /**
- * Parses the card-guide notation for one hole, e.g. `5 R 165r Sh 1@15s 1@4` or `3 ✓ 2@25`:
- * score, tee (par 4/5), approach yards + lie (par 4/5), green, short game, putts, penalties.
+ * Turns one hole's card marks into hole fields. Green in regulation and the number of short-game
+ * shots are worked out from the score and putts, assuming the approach was shot `par - 2`.
  */
-export function parseHoleNotation(line: string, par: number): NotationResult {
-  const tokens = line.trim().toLowerCase().split(/\s+/).filter(Boolean);
+export function parseCardMarks(marks: CardMarks, par: number): NotationResult {
   const fail = (error: string): NotationResult => ({ ok: false, error });
   const isPar3 = par === 3;
-  let i = 0;
-  const next = () => tokens[i];
-
-  const score = Number(next());
+  const { score, putts } = marks;
   if (!Number.isInteger(score) || score < 1) return fail('Start with the score, e.g. "5"');
-  i++;
+  if (!Number.isInteger(putts) || putts < 0) return fail('Add the number of putts');
 
-  const fields: NotationFields = {
-    score,
-    teeResult: null,
-    approachYards: null,
-    approachLie: isPar3 ? 'tee' : 'fairway',
-    gir: false,
-    missDirection: null,
-    shortGameShots: 0,
-    shortGameYards: null,
-    shortGameLie: null,
-    firstPuttFeet: null,
-    putts: 0,
-    penalties: 0,
-  };
-
+  let teeResult: TeeResult | null = null;
   if (!isPar3) {
-    const tee = TEE[next() ?? ''];
-    if (!tee) return fail('After the score, add the tee result: F, L, R, S or P');
-    fields.teeResult = tee;
-    i++;
-    const m = /^(\d+)([a-z]?)$/.exec(next() ?? '');
-    const lie = m ? APPROACH_LIE[m[2] ?? ''] : undefined;
-    if (!m || !lie) return fail('Add the approach yards, e.g. "150" or "165r"');
-    fields.approachYards = Number(m[1]);
-    fields.approachLie = lie;
-    i++;
+    const drive = DRIVE[(marks.drive ?? '').trim().toLowerCase()];
+    if (!drive) return fail('Add the drive: F, L, R, S or X');
+    teeResult = drive;
+  } else if (marks.drive) {
+    return fail('Par 3s have no drive mark');
   }
 
-  const green = next() ?? '';
-  if (GIR.has(green)) fields.gir = true;
-  else if (MISS[green]) fields.missDirection = MISS[green];
-  else return fail('Add the green: ✓ if on in regulation, or L, R, Lg, Sh');
-  i++;
-
-  const atRe = /^(\d+)@(\d+)([a-z]?)$/;
-  const shortGame = atRe.exec(next() ?? '');
-  const afterShort = tokens[i + 1];
-  // Two "n@d" tokens in a row: the first is the short game, the second the putts.
-  if (shortGame && afterShort !== undefined && /^\d+(@\d+)?$/.test(afterShort)) {
-    const lie = SHORT_LIE[shortGame[3] ?? ''];
-    if (!lie) return fail('Short-game lie must be f, r or s (none = fairway)');
-    fields.shortGameShots = Number(shortGame[1]);
-    fields.shortGameYards = Number(shortGame[2]);
-    fields.shortGameLie = lie;
-    i++;
+  const items = marks.stats
+    .toLowerCase()
+    .split('/')
+    .map((s) => s.trim())
+    .filter(Boolean);
+  let approachYards: number | null = null;
+  let approachLie: NotationFields['approachLie'] = isPar3 ? 'tee' : 'fairway';
+  if (!isPar3) {
+    const m = /^(\d+)([rst]?)$/.exec(items.shift() ?? '');
+    if (!m) return fail('Start the numbers with the approach yards, e.g. "165"');
+    approachYards = Number(m[1]);
+    const lie = m[2] as keyof typeof APPROACH_LIE | '';
+    approachLie = lie
+      ? APPROACH_LIE[lie]
+      : teeResult === 'left' || teeResult === 'right'
+        ? 'rough'
+        : 'fairway';
   }
 
-  const putts = /^(\d+)(?:@(\d+))?$/.exec(next() ?? '');
-  if (!putts) return fail('Add the putts, e.g. "2@20" (or "0" if you holed out off the green)');
-  fields.putts = Number(putts[1]);
-  fields.firstPuttFeet = putts[2] === undefined ? null : Number(putts[2]);
-  if (fields.putts > 0 && fields.firstPuttFeet === null) {
-    return fail('Add the first-putt distance, e.g. "2@20"');
+  let chip: { lie: ShortGameLie; yards: number } | null = null;
+  let firstPuttFeet: number | null = null;
+  for (const [i, item] of items.entries()) {
+    const c = /^([frs])(\d+)$/.exec(item);
+    if (c && !chip && firstPuttFeet === null) {
+      chip = { lie: CHIP_LIE[c[1] ?? 'f'] ?? 'fairway', yards: Number(c[2]) };
+    } else if (/^\d+$/.test(item) && i === items.length - 1) {
+      firstPuttFeet = Number(item);
+    } else {
+      return fail(`Didn't understand "${item}": use chip like "s15" and putt feet like "8"`);
+    }
   }
-  i++;
+  if (putts > 0 && firstPuttFeet === null) return fail('Add the first-putt feet at the end');
+  if (putts === 0 && firstPuttFeet !== null) return fail('No putts, so leave out the putt feet');
 
-  const pen = /^\+(\d+)$/.exec(next() ?? '');
-  if (pen) {
-    fields.penalties = Number(pen[1]);
-    i++;
+  const penalties = teeResult === 'penalty' ? 1 : 0;
+  const shortGameShots = chip ? Math.max(1, score - putts - penalties - (par - 2)) : 0;
+  return {
+    ok: true,
+    fields: {
+      score,
+      teeResult,
+      approachYards,
+      approachLie,
+      gir: !chip && score - Math.max(putts, 1) <= par - 2,
+      missDirection: null,
+      shortGameShots,
+      shortGameYards: chip?.yards ?? null,
+      shortGameLie: chip?.lie ?? null,
+      firstPuttFeet,
+      putts,
+      penalties,
+    },
+  };
+}
+
+/**
+ * Parses a hole typed on one line: score, drive (par 4/5), putts, then the spare-row numbers,
+ * e.g. `5 R 1 175 / s15 / 8` or `3 2 20`.
+ */
+export function parseHoleNotation(line: string, par: number): NotationResult {
+  const m = /^\s*(\d+)\s+(?:([a-z↑←→↓✕])\s+)?(\d+)\s*(.*)$/i.exec(line);
+  if (!m) {
+    return {
+      ok: false,
+      error:
+        par === 3
+          ? 'Type score, putts, then the numbers, e.g. "3 2 20"'
+          : 'Type score, drive, putts, then the numbers, e.g. "5 R 1 175 / s15 / 8"',
+    };
   }
-  if (i < tokens.length) return fail(`Unexpected "${tokens[i] ?? ''}"`);
-  return { ok: true, fields };
+  return parseCardMarks(
+    { score: Number(m[1]), drive: m[2] ?? null, putts: Number(m[3]), stats: m[4] ?? '' },
+    par,
+  );
 }

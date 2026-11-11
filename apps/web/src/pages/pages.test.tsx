@@ -1,7 +1,8 @@
-import { screen } from '@testing-library/react';
+import { cleanup, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { App } from '../App';
+import { ResumeRound } from '../components/ResumeRound';
 import { par3ThreePutt, par4, roundInput } from '../test/fixtures';
 import { createTestStore, renderWithProviders } from '../test/render';
 import { CardGuide } from './CardGuide';
@@ -9,6 +10,10 @@ import { Dashboard } from './Dashboard';
 import { RoundDetail } from './RoundDetail';
 import { RoundEntry } from './RoundEntry';
 import { Rounds } from './Rounds';
+
+afterEach(() => {
+  localStorage.clear();
+});
 
 async function seeded() {
   const store = createTestStore();
@@ -25,7 +30,7 @@ describe('Dashboard', () => {
     expect(
       await screen.findByRole('heading', { name: 'Improve your golf game' }),
     ).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Get the card guide & QR code' })).toHaveAttribute(
+    expect(screen.getByRole('link', { name: 'How to mark your card' })).toHaveAttribute(
       'href',
       '/guide',
     );
@@ -134,10 +139,13 @@ describe('RoundEntry', () => {
     await user.type(screen.getByLabelText('Approach yards'), '165');
     await user.click(button('Rough'));
     await user.click(button('Next'));
-    await user.click(button('Missed short'));
+    expect(
+      screen.getByRole('heading', { name: 'Did you chip, pitch or play from a bunker?' }),
+    ).toBeVisible();
     await user.click(button('1'));
     await user.type(screen.getByLabelText('Short-game yards'), '15');
     await user.click(button('Bunker'));
+    await user.click(button('Short'));
     await user.click(button('Next'));
     await user.click(button('1'));
     await user.type(screen.getByLabelText('First putt'), '4');
@@ -145,7 +153,7 @@ describe('RoundEntry', () => {
     await user.click(button('None'));
 
     expect(screen.getByRole('heading', { name: 'Hole 1 summary' })).toBeInTheDocument();
-    expect(screen.getByText('5 R 165r Sh 1@15s 1@4')).toBeInTheDocument();
+    expect(screen.getByText('5 R 1 165 / s15 / 4')).toBeInTheDocument();
     expect(screen.getByText('Looks good.')).toBeInTheDocument();
     expect(button('Go to hole 1')).toHaveClass('done');
 
@@ -170,15 +178,52 @@ describe('RoundEntry', () => {
     await user.click(screen.getByText('Type the card line instead'));
     await user.type(screen.getByLabelText('Card line'), 'nonsense');
     await user.click(button('Apply'));
-    expect(screen.getByText(/Start with the score/)).toBeInTheDocument();
+    expect(screen.getByText(/Type score, drive, putts/)).toBeInTheDocument();
     await user.clear(screen.getByLabelText('Card line'));
-    await user.type(screen.getByLabelText('Card line'), '5 R 165r Sh 1@15s 1@4{Enter}');
+    await user.type(screen.getByLabelText('Card line'), '5 R 2 165 / s15 / 4{Enter}');
     expect(screen.getByText('Looks good.')).toBeInTheDocument();
     await user.click(button('Finish after 1 hole'));
     expect(await screen.findByText('navigated')).toBeInTheDocument();
     const [saved] = await store.listRounds();
     expect(saved).toMatchObject({ courseName: 'Pebble Creek', score: 5 });
     expect(await store.db.courses.count()).toBe(0);
+  });
+
+  it('keeps a round in progress on the device and resumes at the next hole', async () => {
+    const user = userEvent.setup();
+    const store = createTestStore();
+    const first = renderWithProviders(<RoundEntry />, {
+      store,
+      route: '/rounds/new',
+      path: '/rounds/new',
+    });
+    await user.type(await screen.findByLabelText('Course (optional)'), 'Pebble Creek');
+    await user.click(button('Start with hole 1'));
+    await user.click(button('Par 3'));
+    await user.type(screen.getByLabelText('Yards'), '160');
+    await user.click(button('Next'));
+    await user.click(button('3 Par'));
+    await user.click(button('None'));
+    await user.click(button('2'));
+    await user.type(screen.getByLabelText('First putt'), '20');
+    await user.click(button('Next'));
+    await user.click(button('None'));
+    expect(screen.getByText('3 2 20')).toBeInTheDocument();
+    first.unmount();
+
+    renderWithProviders(<ResumeRound />);
+    expect(screen.getByRole('link', { name: 'Resume at hole 2' })).toBeInTheDocument();
+    expect(screen.getByText('Pebble Creek')).toBeInTheDocument();
+    cleanup();
+
+    renderWithProviders(<RoundEntry />, { store, route: '/rounds/new', path: '/rounds/new' });
+    expect(
+      await screen.findByRole('heading', { name: 'Hole 2: par and yardage?' }),
+    ).toBeInTheDocument();
+    expect(button('Go to hole 1')).toHaveClass('done');
+    await user.click(button('Finish after 1 hole'));
+    expect(await screen.findByText('navigated')).toBeInTheDocument();
+    expect(localStorage.getItem('golf-sg.round-in-progress')).toBeNull();
   });
 });
 
@@ -190,17 +235,16 @@ describe('App shell', () => {
     ).toBeInTheDocument();
   });
 
-  it('prints the card guide', async () => {
-    const print = vi.spyOn(window, 'print').mockImplementation(() => undefined);
+  it('shows how to mark the course scorecard, with a QR code to share it', () => {
     renderWithProviders(<CardGuide />);
-    await userEvent.click(screen.getByRole('button', { name: 'Print' }));
-    expect(print).toHaveBeenCalled();
-    expect(screen.getByText('1st putt')).toBeInTheDocument();
-    expect(screen.getByText('5 R 165r Sh 1@15s 1@4')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'How to mark your scorecard' })).toBeInTheDocument();
+    expect(screen.getByRole('img', { name: /Example front nine/ })).toBeInTheDocument();
+    expect(screen.getByText('175 / s15 / 8')).toBeInTheDocument();
     expect(
       screen.getByRole('img', { name: 'QR code linking to the card guide' }),
     ).toBeInTheDocument();
-    expect(screen.getAllByRole('row')).toHaveLength(7 + 1 + 3 + 18 + 1);
+    expect(screen.getByText('Scan to open this guide')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Print' })).not.toBeInTheDocument();
   });
 
   it('shows not found without surfacing storage or connectivity', () => {

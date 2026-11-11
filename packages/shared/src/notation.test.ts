@@ -1,66 +1,84 @@
 import { describe, expect, it } from 'vitest';
-import { parseHoleNotation } from './notation.js';
+import { parseCardMarks, parseHoleNotation } from './notation.js';
 import { holeEntrySchema } from './schemas.js';
 import { holeEntryIssues } from './validation.js';
 
 describe('parseHoleNotation', () => {
   it.each([
-    ['5 R 165r Sh 1@15s 1@4', 4, 410],
-    ['3 ✓ 2@25', 3, 160],
-    ['6 P 90 L 1@12 1@3 +1', 5, 520],
+    ['5 L 2 165 / r15 / 4', 4, 385],
+    ['3 2 20', 3, 170],
+    ['5 F 2 110 / 25', 5, 520],
+    ['4 R 1 175 / s15 / 8', 4, 410],
+    ['4 2 s10 / 5', 3, 195],
+    ['5 X 2 150 / 18', 4, 395],
+    ['6 L 3 95 / 40', 5, 545],
+    ['3 S 0 190 / r25', 4, 425],
   ])('parses the card-guide example "%s" into a valid hole', (line, par, yardage) => {
     const result = parseHoleNotation(line, par);
-    expect(result.ok).toBe(true);
+    expect(result).toMatchObject({ ok: true });
     if (!result.ok) return;
     const entry = holeEntrySchema.parse({ holeNumber: 1, ...result.fields });
     expect(holeEntryIssues({ number: 1, par, yardage }, entry)).toEqual([]);
   });
 
-  it('maps every field of a full line', () => {
-    expect(parseHoleNotation('5 R 165r Sh 1@15s 1@4', 4)).toEqual({
+  it('maps a chipped hole and works out the rest', () => {
+    expect(parseHoleNotation('4 R 1 175 / s15 / 8', 4)).toEqual({
       ok: true,
       fields: {
-        score: 5,
+        score: 4,
         teeResult: 'right',
-        approachYards: 165,
+        approachYards: 175,
         approachLie: 'rough',
         gir: false,
-        missDirection: 'short',
+        missDirection: null,
         shortGameShots: 1,
         shortGameYards: 15,
         shortGameLie: 'sand',
-        firstPuttFeet: 4,
+        firstPuttFeet: 8,
         putts: 1,
         penalties: 0,
       },
     });
   });
 
-  it('treats a short-game shot with no lie letter as from the fairway and allows holing out', () => {
-    const result = parseHoleNotation('4 F 120 L 1@20 0', 4);
-    expect(result).toMatchObject({
-      ok: true,
-      fields: { shortGameLie: 'fairway', putts: 0, firstPuttFeet: null, missDirection: 'left' },
-    });
+  it('derives green in regulation from score and putts', () => {
+    const gir = parseHoleNotation('4 F 2 140 / 30', 4);
+    const missed = parseHoleNotation('5 F 2 140 / 30', 4);
+    expect(gir.ok && gir.fields.gir).toBe(true);
+    expect(missed.ok && missed.fields.gir).toBe(false);
   });
 
-  it('is case-insensitive and accepts G for green in regulation', () => {
-    expect(parseHoleNotation('4 f 150 g 2@20', 4)).toMatchObject({
-      ok: true,
-      fields: { gir: true },
-    });
+  it('counts extra short-game shots from the score', () => {
+    const result = parseHoleNotation('6 F 2 150 / f20 / 6', 4);
+    expect(result.ok && result.fields.shortGameShots).toBe(2);
+    expect(result.ok && result.fields.shortGameLie).toBe('fairway');
+  });
+
+  it('uses an approach lie letter over the drive arrow', () => {
+    const result = parseHoleNotation('5 L 2 165s / 30', 4);
+    expect(result.ok && result.fields.approachLie).toBe('sand');
+  });
+
+  it('turns a penalty drive into one penalty stroke', () => {
+    const result = parseHoleNotation('5 X 2 150 / 18', 4);
+    expect(result.ok && result.fields.penalties).toBe(1);
   });
 
   it.each([
-    ['', 4, 'score'],
-    ['4 X 150 ✓ 2@20', 4, 'tee result'],
-    ['4 F ✓ 2@20', 4, 'approach'],
-    ['4 F 150 2@20', 4, 'green'],
-    ['4 F 150 ✓ 2', 4, 'first-putt'],
-    ['3 ✓ 2@25 extra', 3, 'Unexpected'],
-  ])('explains what is wrong with "%s"', (line, par, hint) => {
+    ['5 2 165 / 20', 4, 'drive'],
+    ['5 R 2 165', 4, 'first-putt feet'],
+    ['3 R 0 190 / r25 / 4', 4, 'No putts'],
+    ['5 R 2 165 / x20 / 4', 4, 'x20'],
+    ['3 R 2 20', 3, 'Par 3s'],
+    ['nonsense', 4, 'Type score'],
+  ])('explains what is wrong with "%s"', (line, par, message) => {
     const result = parseHoleNotation(line, par);
     expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.error).toContain(hint);
+    if (!result.ok) expect(result.error).toContain(message);
+  });
+
+  it('accepts drive arrows as written on the card', () => {
+    const result = parseCardMarks({ score: 4, drive: '←', putts: 2, stats: '150 / 25' }, 4);
+    expect(result.ok && result.fields.teeResult).toBe('left');
   });
 });
