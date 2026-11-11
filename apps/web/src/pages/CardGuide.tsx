@@ -4,7 +4,7 @@ import { QrCode } from '../components/QrCode';
 const NOTATION: [field: string, write: string, when: string, example: string][] = [
   ['Score', 'Strokes on the hole, penalties included.', 'Every hole', '5'],
   [
-    'Tee',
+    'Drive',
     'Where the drive finished: F fairway, L left, R right, S short, P penalty/OB.',
     'Par 4s and 5s',
     'R',
@@ -54,7 +54,7 @@ const SHEET_COLUMNS = [
   'Hole',
   'Par',
   'Score',
-  'Tee',
+  'Drive',
   'Approach',
   'Green',
   'Short game',
@@ -84,7 +84,7 @@ export function CardGuide() {
           the back of the card, or the pocket sheet below. Skip anything that didn&apos;t happen.
         </p>
         <p className="notation-pattern">
-          <code>Score · Tee · Approach · Green · Short game · Putts · Penalties</code>
+          <code>Score · Drive · Approach · Green · Short game · Putts · Penalties</code>
         </p>
         <table className="table">
           <thead>
@@ -143,8 +143,8 @@ export function CardGuide() {
           </figure>
         </div>
         <p className="small">
-          <code>Tee</code> F L R S P · <code>Approach</code> yds + r s t · <code>Green</code> ✓ L R
-          Lg Sh · <code>Short game</code> n@yds + f r s · <code>Putts</code> n@ft
+          <code>Drive</code> F L R S P · <code>Approach</code> yds + r s t · <code>Green</code> ✓ L
+          R Lg Sh · <code>Short game</code> n@yds + f r s · <code>Putts</code> n@ft
         </p>
         <table className="table sheet">
           <thead>

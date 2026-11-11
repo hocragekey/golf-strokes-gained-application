@@ -8,10 +8,10 @@
       name="description"
       content="Mark a few numbers on any scorecard, type them in after the round, and see where you gain and lose strokes. Works offline, data stays on your device."
     />
-    <meta name="theme-color" content="#14532d" />
+    <meta name="theme-color" content="#00843d" />
     <link
       rel="icon"
-      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%2314532d'/%3E%3Ccircle cx='16' cy='22' r='5' fill='%23fff'/%3E%3Cpath d='M12 4v14M12 4l9 4-9 4' fill='none' stroke='%23facc15' stroke-width='2' stroke-linejoin='round'/%3E%3C/svg%3E"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%2300843d'/%3E%3Crect x='5' y='22' width='4' height='4' fill='%23d4d8da'/%3E%3Crect x='10' y='18' width='4' height='8' fill='%23d4d8da'/%3E%3Crect x='15' y='14' width='4' height='12' fill='%23d4d8da'/%3E%3Ccircle cx='17' cy='10.5' r='2.5' fill='%23fff'/%3E%3Crect x='23' y='5' width='2' height='21' fill='%23fff'/%3E%3Cpath d='M25 5h5l-2 3 2 3h-5z' fill='%23d4d8da'/%3E%3Crect x='4' y='26' width='24' height='2' fill='%23fff'/%3E%3C/svg%3E"
     />
     <style>
       :root {
@@ -21,8 +21,8 @@
         --border: #dbe3d7;
         --text: #13201a;
         --muted: #56665d;
-        --accent: #166534;
-        --accent-2: #14532d;
+        --accent: #00843d;
+        --accent-2: #006b31;
         --gold: #ca8a04;
         --pos: #15803d;
         --neg: #dc2626;
@@ -501,24 +501,6 @@
           transform: rotate(90deg);
         }
       }
-      @media (prefers-color-scheme: dark) {
-        :root {
-          --bg: #0c120f;
-          --surface: #121a16;
-          --surface-2: #18231d;
-          --border: #24332a;
-          --text: #e6ede8;
-          --muted: #93a49a;
-          --accent: #22c55e;
-          --accent-2: #16a34a;
-        }
-        header.nav {
-          background: rgb(12 18 15 / 85%);
-        }
-        .btn.primary {
-          color: #052e16;
-        }
-      }
     </style>
   </head>
   <body>
@@ -526,15 +508,14 @@
       <div class="wrap">
         <a class="brand" href="#top">
           <svg viewBox="0 0 32 32" aria-hidden="true">
-            <rect width="32" height="32" rx="8" fill="#14532d" />
-            <circle cx="16" cy="22" r="5" fill="#fff" />
-            <path
-              d="M12 4v14M12 4l9 4-9 4"
-              fill="none"
-              stroke="#facc15"
-              stroke-width="2"
-              stroke-linejoin="round"
-            />
+            <rect width="32" height="32" fill="#00843d" />
+            <rect x="5" y="22" width="4" height="4" fill="#d4d8da" />
+            <rect x="10" y="18" width="4" height="8" fill="#d4d8da" />
+            <rect x="15" y="14" width="4" height="12" fill="#d4d8da" />
+            <circle cx="17" cy="10.5" r="2.5" fill="#fff" />
+            <rect x="23" y="5" width="2" height="21" fill="#fff" />
+            <path d="M25 5h5l-2 3 2 3h-5z" fill="#d4d8da" />
+            <rect x="4" y="26" width="24" height="2" fill="#fff" />
           </svg>
           Golf Strokes Gained
         </a>
@@ -661,7 +642,7 @@
           <h2>One line per hole, on any scorecard</h2>
           <p class="lead">
             Always in the same order:
-            <code>Score · Tee · Approach · Green · Short game · Putts · Penalties</code>. Skip
+            <code>Score · Drive · Approach · Green · Short game · Putts · Penalties</code>. Skip
             anything that didn't happen.
           </p>
           <div class="card scorecard" style="margin-top: 24px">
@@ -670,7 +651,7 @@
                 <tr>
                   <th>Hole</th>
                   <th>Score</th>
-                  <th>Tee</th>
+                  <th>Drive</th>
                   <th>Approach</th>
                   <th>Green</th>
                   <th>Short game</th>
@@ -721,7 +702,7 @@
               </tbody>
             </table>
             <div class="legend">
-              <div><strong>Tee</strong> F fairway · L left · R right · S short · P penalty</div>
+              <div><strong>Drive</strong> F fairway · L left · R right · S short · P penalty</div>
               <div>
                 <strong>Approach</strong> yards to the pin + lie: r rough · s sand · t trees
               </div>

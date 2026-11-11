@@ -1,8 +1,6 @@
 import { Navigate, NavLink, Route, Routes } from 'react-router';
 import { useAccount } from './auth/context';
-import { OfflineBadge } from './components/OfflineBadge';
 import { Account } from './pages/Account';
-import { Backup } from './pages/Backup';
 import { CardGuide } from './pages/CardGuide';
 import { Dashboard } from './pages/Dashboard';
 import { NotFound } from './pages/NotFound';
@@ -30,7 +28,6 @@ export function App() {
             New round
           </NavLink>
           <NavLink to="/guide">Card guide</NavLink>
-          <NavLink to="/data">My data</NavLink>
           {enabled && (
             <NavLink
               to="/account"
@@ -40,7 +37,6 @@ export function App() {
             </NavLink>
           )}
         </nav>
-        <OfflineBadge />
       </header>
       <main>
         <Routes>
@@ -50,8 +46,8 @@ export function App() {
           <Route path="/rounds/:id" element={<RoundDetail />} />
           <Route path="/rounds/:id/edit" element={<RoundEntry />} />
           <Route path="/guide" element={<CardGuide />} />
-          <Route path="/data" element={<Backup />} />
-          <Route path="/backup" element={<Navigate to="/data" replace />} />
+          <Route path="/data" element={<Navigate to="/" replace />} />
+          <Route path="/backup" element={<Navigate to="/" replace />} />
           <Route path="/account" element={<Account />} />
           <Route path="*" element={<NotFound />} />
         </Routes>

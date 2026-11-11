@@ -4,7 +4,7 @@
 | ------- | ------------------------------------------------------------------------------------ |
 | Status  | v1 implemented (Phase 1); Phases 2–5 proposed                                        |
 | Owner   | @hocragekey                                                                          |
-| Version | 1.5, saved courses and backup import removed (see §11)                               |
+| Version | 1.6, storage and sync are invisible; data download removed (see §11)                 |
 | Related | [Technical design](technical-design.md) · [ADRs](adr) · [AWS runbook](deploy-aws.md) |
 
 This PRD is the source of truth for **what** the product does and **why**. The
@@ -59,7 +59,8 @@ enough on that card** to compute SG by category, and a tool that turns it into a
    round and the one thing to practise first.
 4. **Over time:** watch per-18 SG trends and practice priorities over the last 5, 20, or all rounds;
    compare against a Tour or scratch baseline.
-5. **Safety net:** export a JSON backup; restore it on another device or browser.
+5. **Everywhere:** sign in with Google and every device shows the same rounds. Sync happens on its
+   own; the golfer never thinks about storage, connectivity or backups.
 
 ## 5. Functional requirements
 
@@ -67,13 +68,13 @@ Priority uses MoSCoW. Status: ✅ implemented · ◐ partial · 🚧 in progress
 
 ### 5.1 Card capture (scorecard-agnostic)
 
-| ID         | Requirement                                                                                                                                                                                                         | Priority | Status |
-| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- | ------ |
-| FR-CARD-01 | The app defines a **one-line-per-hole notation** in a fixed order (`Score · Tee · Approach · Green · Short game · Putts · Penalties`) that fits in a single scorecard column, spare row, margin, or scrap of paper. | Must     | ✅     |
-| FR-CARD-02 | The card guide explains every field, when it applies (e.g. tee result only on par 4/5), and shows worked examples for a par 3, 4 and 5.                                                                             | Must     | ✅     |
-| FR-CARD-03 | A **printable pocket stat sheet** (18 rows, one column per field, with a notation legend) for courses whose card has no room.                                                                                       | Must     | ✅     |
-| FR-CARD-04 | The pocket sheet carries a **QR code** to the card guide of the environment it was printed from, generated on-device (works offline).                                                                               | Should   | ✅     |
-| FR-CARD-05 | The notation captures exactly the fields the SG engine needs (FR-ENTRY-02), nothing more.                                                                                                                           | Must     | ✅     |
+| ID         | Requirement                                                                                                                                                                                                           | Priority | Status |
+| ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- | ------ |
+| FR-CARD-01 | The app defines a **one-line-per-hole notation** in a fixed order (`Score · Drive · Approach · Green · Short game · Putts · Penalties`) that fits in a single scorecard column, spare row, margin, or scrap of paper. | Must     | ✅     |
+| FR-CARD-02 | The card guide explains every field, when it applies (e.g. tee result only on par 4/5), and shows worked examples for a par 3, 4 and 5.                                                                               | Must     | ✅     |
+| FR-CARD-03 | A **printable pocket stat sheet** (18 rows, one column per field, with a notation legend) for courses whose card has no room.                                                                                         | Must     | ✅     |
+| FR-CARD-04 | The pocket sheet carries a **QR code** to the card guide of the environment it was printed from, generated on-device (works offline).                                                                                 | Should   | ✅     |
+| FR-CARD-05 | The notation captures exactly the fields the SG engine needs (FR-ENTRY-02), nothing more.                                                                                                                             | Must     | ✅     |
 
 ### 5.2 Course data
 
@@ -108,7 +109,7 @@ yardage will come from a course data integration (FR-COURSE-04).
 | FR-HOME-02 | With no rounds yet, home explains the three steps (before, during, after the round).                                                                                           | Must     | ✅     |
 | FR-HOME-03 | Dashboard and round results lead with **Practice this first**: the weakest category, its SG, and one concrete drill. Round results also show the best and toughest hole.       | Must     | ✅     |
 | FR-HOME-04 | Dashboard shows a total-SG trend across the selected rounds.                                                                                                                   | Should   | ✅     |
-| FR-HOME-05 | On phones, navigation is a bottom tab bar (Home, Rounds, New round, Card guide, My data).                                                                                      | Should   | ✅     |
+| FR-HOME-05 | On phones, navigation is a bottom tab bar (Home, Rounds, New round, Card guide, Sign in/Account).                                                                              | Should   | ✅     |
 
 ### 5.4 Strokes gained and insights
 
@@ -126,22 +127,22 @@ yardage will come from a course data integration (FR-COURSE-04).
 
 ### 5.5 Data ownership
 
-| ID         | Requirement                                                                                                 | Priority | Status     |
-| ---------- | ----------------------------------------------------------------------------------------------------------- | -------- | ---------- |
-| FR-DATA-01 | All rounds are stored on the device. Nothing leaves it unless the golfer signs in (FR-ACCT-01).             | Must     | ✅         |
-| FR-DATA-02 | "Download my data": export everything on the device as a versioned JSON file.                               | Must     | ✅         |
-| FR-DATA-03 | ~~Import a backup file.~~ Removed in 1.5 (owner): signing in (FR-SYNC-01..03) moves rounds between devices. | —        | ❌ Removed |
-| FR-DATA-04 | Request persistent storage so the browser does not evict data under pressure.                               | Must     | ✅         |
-| FR-DATA-05 | CSV export of rounds and hole data for spreadsheets.                                                        | Could    | 🔜 (P2)    |
+| ID         | Requirement                                                                                                                                                           | Priority | Status     |
+| ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- | ---------- |
+| FR-DATA-01 | Rounds are stored on the device so the app works with no signal. This is never surfaced in the UI. Nothing leaves the device unless the golfer signs in (FR-ACCT-01). | Must     | ✅         |
+| FR-DATA-02 | ~~"Download my data" JSON export.~~ Removed in 1.6 (owner): storage is not a user-facing concept.                                                                     | —        | ❌ Removed |
+| FR-DATA-03 | ~~Import a backup file.~~ Removed in 1.5 (owner): signing in (FR-SYNC-01..03) moves rounds between devices.                                                           | —        | ❌ Removed |
+| FR-DATA-04 | Request persistent storage so the browser does not evict data under pressure.                                                                                         | Must     | ✅         |
+| FR-DATA-05 | CSV export of rounds and hole data for spreadsheets.                                                                                                                  | Could    | 🔜 (P2)    |
 
 ### 5.6 Offline and install
 
-| ID        | Requirement                                                                                     | Priority | Status |
-| --------- | ----------------------------------------------------------------------------------------------- | -------- | ------ |
-| FR-PWA-01 | After the first visit the app loads and works with no network, including previously saved data. | Must     | ✅     |
-| FR-PWA-02 | Installable to the home screen (web manifest, icons, standalone display).                       | Must     | ✅     |
-| FR-PWA-03 | Visible offline indicator that reassures rather than warns.                                     | Should   | ✅     |
-| FR-PWA-04 | New releases reach installed clients on next launch without manual cache clearing.              | Must     | ✅     |
+| ID        | Requirement                                                                                              | Priority | Status     |
+| --------- | -------------------------------------------------------------------------------------------------------- | -------- | ---------- |
+| FR-PWA-01 | After the first visit the app loads and works with no network, including previously saved data.          | Must     | ✅         |
+| FR-PWA-02 | Installable to the home screen (web manifest, icons, standalone display).                                | Must     | ✅         |
+| FR-PWA-03 | ~~Visible offline indicator.~~ Removed in 1.6 (owner): the app just works; connectivity is not surfaced. | —        | ❌ Removed |
+| FR-PWA-04 | New releases reach installed clients on next launch without manual cache clearing.                       | Must     | ✅         |
 
 ### 5.7 Accounts and sync
 
@@ -149,20 +150,20 @@ Signing in is optional. Signed out, the app behaves exactly as in Phase 1. Signe
 keeps its own full copy and syncs in the background, so entering a round on the course never waits
 for the network.
 
-| ID         | Requirement                                                                                                                                                                                        | Priority  | Status  |
-| ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------- | ------- |
-| FR-ACCT-01 | **Sign in with Google** from the Account page. No passwords, no separate sign-up step; the Google account is the identity.                                                                         | Must      | 🚧      |
-| FR-ACCT-02 | The Account page shows who is signed in, sync status and a sign-out button. The navigation shows the signed-in state.                                                                              | Must      | 🚧      |
-| FR-ACCT-03 | Signing out asks whether to also remove the rounds from this device (default yes, since they are safe in the account), so a shared phone does not leak one golfer's rounds into another's account. | Must      | 🚧      |
-| FR-ACCT-04 | **Delete my account data** permanently removes every round and course stored for the account on the server, after confirmation.                                                                    | Must      | 🚧      |
-| FR-ACCT-05 | Account features are hidden when the build has no Google client configured; the rest of the app is unaffected.                                                                                     | Must      | 🚧      |
-| FR-ACCT-06 | Native iOS (Phase 3) also offers **Sign in with Apple** (App Store guideline 4.8) and maps it to the same account model.                                                                           | Must (P3) | 🔜 (P3) |
-| FR-SYNC-01 | The first sign-in on a device uploads the rounds and courses already on it.                                                                                                                        | Must      | 🚧      |
-| FR-SYNC-02 | Rounds saved, edited or deleted while offline queue on the device and upload automatically when the connection returns.                                                                            | Must      | 🚧      |
-| FR-SYNC-03 | Changes from the golfer's other devices download on sign-in, on reconnect, when the app regains focus and on "Sync now".                                                                           | Must      | 🚧      |
-| FR-SYNC-04 | If the same round changes on two devices, the most recent edit wins; deletes sync as well and are never resurrected by a stale device.                                                             | Must      | 🚧      |
-| FR-SYNC-05 | A sync status line: "Synced 2 min ago", "3 changes waiting", "Offline, will sync later", "Sign in again to sync". Failures never block local use.                                                  | Must      | 🚧      |
-| FR-SYNC-06 | **Progress across devices**: the dashboard, trend and practice priorities use every round in the account once synced.                                                                              | Must      | 🚧      |
+| ID         | Requirement                                                                                                                                                                                                                        | Priority  | Status  |
+| ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------- | ------- |
+| FR-ACCT-01 | **Sign in with Google** from the Account page. No passwords, no separate sign-up step; the Google account is the identity.                                                                                                         | Must      | 🚧      |
+| FR-ACCT-02 | The Account page shows who is signed in, a sign-out button and account deletion. No sync controls.                                                                                                                                 | Must      | 🚧      |
+| FR-ACCT-03 | Signing out removes the rounds from the device once they are in the account, so a shared phone does not leak one golfer's rounds. Changes that have not uploaded yet stay on the device, silently, and upload at the next sign-in. | Must      | 🚧      |
+| FR-ACCT-04 | **Delete account data** permanently removes every round stored for the account on the server and on this device, after confirmation.                                                                                               | Must      | 🚧      |
+| FR-ACCT-05 | Account features are hidden when the build has no Google client configured; the rest of the app is unaffected.                                                                                                                     | Must      | 🚧      |
+| FR-ACCT-06 | Native iOS (Phase 3) also offers **Sign in with Apple** (App Store guideline 4.8) and maps it to the same account model.                                                                                                           | Must (P3) | 🔜 (P3) |
+| FR-SYNC-01 | The first sign-in on a device uploads the rounds and courses already on it.                                                                                                                                                        | Must      | 🚧      |
+| FR-SYNC-02 | Rounds saved, edited or deleted while offline queue on the device and upload automatically when the connection returns.                                                                                                            | Must      | 🚧      |
+| FR-SYNC-03 | Changes from the golfer's other devices download on sign-in, on reconnect and when the app regains focus.                                                                                                                          | Must      | 🚧      |
+| FR-SYNC-04 | If the same round changes on two devices, the most recent edit wins; deletes sync as well and are never resurrected by a stale device.                                                                                             | Must      | 🚧      |
+| FR-SYNC-05 | Sync is invisible: no status line, sync button or offline message. Failures never block local use and retry automatically. The only surfaced state is an expired sign-in, shown as a marker on the Account menu item.              | Must      | 🚧      |
+| FR-SYNC-06 | **Progress across devices**: the dashboard, trend and practice priorities use every round in the account once synced.                                                                                                              | Must      | 🚧      |
 
 ## 6. Non-functional requirements
 
@@ -243,7 +244,7 @@ Everything marked ✅ above. Free, no account. Hosted on AWS (dev + prod) for a 
 
 | Tier                | Price (indicative)      | Includes                                                                                                                   |
 | ------------------- | ----------------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| **Free**            | $0                      | Everything in Phase 1, local-only; unlimited rounds; JSON backup.                                                          |
+| **Free**            | $0                      | Everything in Phase 1; unlimited rounds; sync across devices.                                                              |
 | **Pro**             | ~$5/month or ~$40/year  | Sync across devices, handicap-matched baselines, trends beyond 20 rounds, drill library, CSV, native app premium features. |
 | **Pro + AI coach**  | ~$10/month or ~$80/year | Pro plus AI coach with a monthly usage allowance.                                                                          |
 | **Coach / Academy** | ~$20–50/month per coach | Student roster, shared dashboards, lesson notes, bulk invite; academy billing.                                             |
@@ -280,3 +281,4 @@ Principles:
 | 1.3     | Owner UX review: course setup is no longer required. Rounds carry their own par/yardage (FR-ENTRY-01, FR-COURSE-01..03 rewritten; FR-ENTRY-07 migration). Entry became a guided one-question-per-screen flow (FR-ENTRY-05) with the card-line parser pulled forward from Phase 2 as an optional shortcut (FR-ENTRY-06). New home/results requirements FR-HOME-01..05 (course-photo hero, practice-first drill, trend, mobile tab bar). |
 | 1.4     | Owner request: accounts to save strokes gained and track progress. Added §5.7 (FR-ACCT-01..06, FR-SYNC-01..06). Owner chose Google sign-in (Q3 resolved). Phase 2 roadmap updated to API Gateway + Lambda + DynamoDB (ADR 0011).                                                                                                                                                                                                       |
 | 1.5     | Owner request: saved courses and backup import are not needed yet. Removed FR-COURSE-01/03 and FR-DATA-03; FR-DATA-02 is now "Download my data" (export only). Course pre-fill will come from a course data integration (FR-COURSE-04).                                                                                                                                                                                                |
+| 1.6     | Owner UX review: storage and connectivity are implementation details, not features. Removed FR-DATA-02 (data download) and FR-PWA-03 (offline badge); FR-SYNC-05 is now invisible sync; FR-ACCT-02..04 simplified (sign-out clears uploaded rounds, keeps unsent ones; deleting account data also clears the device).                                                                                                                  |

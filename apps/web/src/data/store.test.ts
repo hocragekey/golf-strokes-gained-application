@@ -65,13 +65,6 @@ describe('LocalStore', () => {
     expect((await store.getStats()).rounds).toBe(2);
   });
 
-  it('exports all data as a versioned JSON document', async () => {
-    const { store } = await seed();
-    const backup = await store.exportBackup();
-    expect(backup).toMatchObject({ app: 'golf-strokes-gained', version: 2, courses: [] });
-    expect(backup.rounds).toHaveLength(1);
-  });
-
   it('migrates v1 databases so existing rounds keep working', async () => {
     const name = `test-${crypto.randomUUID()}`;
     const { Dexie } = await import('dexie');

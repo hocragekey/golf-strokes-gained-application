@@ -55,7 +55,6 @@ test('records a round with no course setup, then works offline', async ({ page, 
   await page.reload();
   await context.setOffline(true);
   await page.reload();
-  await expect(page.getByText('Offline · everything still works')).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Practice priorities' })).toBeVisible();
   await page.getByRole('link', { name: 'Rounds', exact: true }).click();
   await expect(page.getByRole('cell', { name: /Riverside Nine/ })).toBeVisible();
