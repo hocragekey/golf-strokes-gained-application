@@ -227,8 +227,9 @@ well inside NFR-PERF-01's 100 ms phone budget.
 - Connectivity is never shown in the UI (FR-PWA-03 removed); sync retries on `online`, on focus
   and every 30 s after a failure while the app stays open.
 - Sign-out removes uploaded rounds and keeps only unsent ones (with their outbox) for the same
-  account's next sign-in. A different account signing in drops those leftovers instead of
-  uploading them into its own account.
+  account's next sign-in, and resets the pull cursor so that sign-in pulls the removed rounds back.
+  A different account signing in drops those leftovers (listed in `meta.leftovers`) instead of
+  uploading them; rounds saved while signed out are kept and uploaded to whoever signs in.
 
 ### 7.4 Card guide and pocket sheet (FR-CARD-01..05)
 

@@ -42,15 +42,24 @@ export class SyncEngine {
 
   /**
    * Called on sign-in. A device syncing for the first time (or as a different account) queues
-   * everything it holds, so existing rounds upload (FR-SYNC-01). Unsent rounds another account left
-   * behind are dropped rather than uploaded into this one.
+   * everything it holds, so existing rounds upload (FR-SYNC-01). Data another account left behind is
+   * dropped rather than uploaded into this one; rounds saved while signed out are kept.
    */
   async adopt(sub: string): Promise<void> {
     const previous = await this.meta('syncedSub');
     if (previous === sub) return;
     const tables = [this.db.rounds, this.db.courses, this.db.pending, this.db.meta];
     await this.db.transaction('rw', tables, async () => {
-      if (previous) await Promise.all([this.db.rounds.clear(), this.db.courses.clear()]);
+      if (previous) {
+        const saved = await this.meta('leftovers');
+        if (saved === undefined) {
+          await Promise.all([this.db.rounds.clear(), this.db.courses.clear()]);
+        } else {
+          const leftovers = new Set(JSON.parse(saved) as string[]);
+          await this.db.rounds.filter((r) => leftovers.has(changeKey('round', r.id))).delete();
+          await this.db.courses.filter((c) => leftovers.has(changeKey('course', c.id))).delete();
+        }
+      }
       const queue = (kind: PendingChange['kind'], e: { id: string; updatedAt: string }) =>
         this.db.pending.put({
           key: changeKey(kind, e.id),
@@ -69,7 +78,8 @@ export class SyncEngine {
 
   /**
    * Called on sign-out (FR-ACCT-03). Uploaded data leaves the device; anything still pending stays,
-   * with its outbox and sync state, so it uploads when the same golfer signs back in.
+   * with its outbox, so it uploads when the same golfer signs back in. The cursor is reset so that
+   * sign-in pulls back everything removed here.
    */
   async signOut(): Promise<void> {
     const tables = [this.db.rounds, this.db.courses, this.db.pending, this.db.meta];
@@ -81,6 +91,8 @@ export class SyncEngine {
       }
       await this.db.rounds.filter((r) => !keep.has(changeKey('round', r.id))).delete();
       await this.db.courses.filter((c) => !keep.has(changeKey('course', c.id))).delete();
+      await this.db.meta.delete('cursor');
+      await this.setMeta('leftovers', JSON.stringify([...keep]));
     });
   }
 

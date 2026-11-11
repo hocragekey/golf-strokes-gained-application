@@ -12,7 +12,7 @@ export interface PendingChange {
 }
 
 export interface MetaEntry {
-  key: 'cursor' | 'syncedSub' | 'lastSyncedAt';
+  key: 'cursor' | 'syncedSub' | 'lastSyncedAt' | 'leftovers';
   value: string;
 }
 
