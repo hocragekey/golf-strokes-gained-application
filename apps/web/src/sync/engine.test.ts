@@ -132,6 +132,7 @@ describe('SyncEngine', () => {
     expect(await a.engine.meta('syncedSub')).toBe('alice');
     expect(await a.engine.meta('cursor')).toBeUndefined();
     await a.engine.adopt('alice');
+    expect(await a.engine.meta('leftovers')).toBeUndefined();
     await a.engine.run();
     expect(await a.store.db.rounds.count()).toBe(2);
     await a.engine.signOut();

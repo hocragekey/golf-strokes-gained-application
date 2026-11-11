@@ -47,7 +47,11 @@ export class SyncEngine {
    */
   async adopt(sub: string): Promise<void> {
     const previous = await this.meta('syncedSub');
-    if (previous === sub) return;
+    if (previous === sub) {
+      // Back in the account that left them, the leftovers are its own again.
+      await this.db.meta.delete('leftovers');
+      return;
+    }
     const tables = [this.db.rounds, this.db.courses, this.db.pending, this.db.meta];
     await this.db.transaction('rw', tables, async () => {
       if (previous) {
