@@ -10,7 +10,7 @@ Parameters:
     AllowedPattern: '^[a-z][a-z0-9-]{1,20}$'
   Environment:
     Type: String
-    AllowedValues: [dev, prod]
+    AllowedValues: [dev, test, prod]
   GoogleClientId:
     Type: String
     Description: Google OAuth web client ID; the only accepted token audience
