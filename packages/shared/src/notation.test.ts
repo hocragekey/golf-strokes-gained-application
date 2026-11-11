@@ -77,6 +77,12 @@ describe('parseHoleNotation', () => {
     if (!result.ok) expect(result.error).toContain(message);
   });
 
+  it('stays fast on long, odd input', () => {
+    const start = performance.now();
+    expect(parseHoleNotation(`9 9${' '.repeat(50_000)}x`, 4).ok).toBe(false);
+    expect(performance.now() - start).toBeLessThan(100);
+  });
+
   it('accepts drive arrows as written on the card', () => {
     const result = parseCardMarks({ score: 4, drive: '←', putts: 2, stats: '150 / 25' }, 4);
     expect(result.ok && result.fields.teeResult).toBe('left');

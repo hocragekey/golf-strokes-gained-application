@@ -111,8 +111,14 @@ export function parseCardMarks(marks: CardMarks, par: number): NotationResult {
  * e.g. `5 R 1 175 / s15 / 8` or `3 2 20`.
  */
 export function parseHoleNotation(line: string, par: number): NotationResult {
-  const m = /^\s*(\d+)\s+(?:([a-z↑←→↓✕])\s+)?(\d+)\s*(.*)$/i.exec(line);
-  if (!m) {
+  // Plain token splitting (no backtracking regex) keeps parsing linear on any input.
+  const tokens = line.trim().slice(0, 120).split(/\s+/);
+  const isNumber = (t: string | undefined) => t !== undefined && /^\d{1,3}$/.test(t);
+  let i = 0;
+  const score = tokens[i++];
+  const drive = isNumber(tokens[i]) ? null : (tokens[i++] ?? null);
+  const putts = tokens[i++];
+  if (!isNumber(score) || !isNumber(putts) || (drive !== null && drive.length !== 1)) {
     return {
       ok: false,
       error:
@@ -122,7 +128,7 @@ export function parseHoleNotation(line: string, par: number): NotationResult {
     };
   }
   return parseCardMarks(
-    { score: Number(m[1]), drive: m[2] ?? null, putts: Number(m[3]), stats: m[4] ?? '' },
+    { score: Number(score), drive, putts: Number(putts), stats: tokens.slice(i).join(' ') },
     par,
   );
 }
