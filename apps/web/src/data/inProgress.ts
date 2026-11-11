@@ -11,6 +11,8 @@ export interface RoundInProgress {
   holeCount: number;
   layout: LayoutDraft[];
   drafts: HoleDraft[];
+  /** The hole on screen when the round was last saved (0-based). */
+  hole?: number;
 }
 
 export function loadInProgress(): RoundInProgress | null {

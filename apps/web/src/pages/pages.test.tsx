@@ -225,6 +225,30 @@ describe('RoundEntry', () => {
     expect(await screen.findByText('navigated')).toBeInTheDocument();
     expect(localStorage.getItem('golf-sg.round-in-progress')).toBeNull();
   });
+
+  it('resumes an unfinished hole, and keeps par and yardage typed before the first score', async () => {
+    const user = userEvent.setup();
+    const first = renderWithProviders(<RoundEntry />, {
+      route: '/rounds/new',
+      path: '/rounds/new',
+    });
+    await user.click(await screen.findByRole('button', { name: 'Start with hole 1' }));
+    await user.click(button('Par 3'));
+    await user.type(screen.getByLabelText('Yards'), '160');
+    first.unmount();
+
+    const second = renderWithProviders(<RoundEntry />, {
+      route: '/rounds/new',
+      path: '/rounds/new',
+    });
+    expect(await screen.findByLabelText('Yards')).toHaveValue(160);
+    await user.click(button('Next'));
+    await user.click(button('4 Bogey'));
+    second.unmount();
+
+    renderWithProviders(<RoundEntry />, { route: '/rounds/new', path: '/rounds/new' });
+    expect(await screen.findByRole('heading', { name: 'Hole 1 summary' })).toBeInTheDocument();
+  });
 });
 
 describe('App shell', () => {

@@ -23,7 +23,12 @@ import {
   type HoleDraft,
   type LayoutDraft,
 } from '../components/scorecard';
-import { clearInProgress, loadInProgress, saveInProgress } from '../data/inProgress';
+import {
+  clearInProgress,
+  loadInProgress,
+  saveInProgress,
+  type RoundInProgress,
+} from '../data/inProgress';
 import { formatToPar } from '../format';
 
 const LABELS: Record<string, string> = {
@@ -240,7 +245,15 @@ interface Position {
   step: Step | 'details';
 }
 
-function resumePosition(drafts: readonly HoleDraft[], holeCount: number): Position {
+/** Back to the hole the golfer was on if it isn't finished, otherwise the next blank hole. */
+function resumePosition(round: RoundInProgress): Position {
+  const { drafts, holeCount, hole: at } = round;
+  if (at !== undefined) {
+    const draft = drafts[at] ?? emptyDraft();
+    if (isBlank(draft)) return { hole: at, step: 'layout' };
+    const hole = parseLayout(round.layout[at] ?? emptyLayout(), at + 1).hole;
+    if (!hole || !validateRow(draft, hole).entry) return { hole: at, step: 'review' };
+  }
   const next = drafts.slice(0, holeCount).findIndex(isBlank);
   return next < 0 ? { hole: holeCount - 1, step: 'review' } : { hole: next, step: 'layout' };
 }
@@ -271,16 +284,26 @@ function Scorecard({ existing }: { existing?: RoundDetail }) {
     }),
   );
   const [pos, setPos] = useState<Position>(() =>
-    resumed ? resumePosition(resumed.drafts, resumed.holeCount) : { hole: 0, step: 'details' },
+    resumed ? resumePosition(resumed) : { hole: 0, step: 'details' },
   );
   const [cardLine, setCardLine] = useState('');
   const [lineError, setLineError] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (existing || drafts.every(isBlank)) return;
-    saveInProgress({ courseName, tees, playedOn, notes, holeCount, layout, drafts });
-  }, [existing, courseName, tees, playedOn, notes, holeCount, layout, drafts]);
+    // Saved from the first hole on, so nothing typed is lost if the phone closes the app.
+    if (existing || (pos.step === 'details' && drafts.every(isBlank))) return;
+    saveInProgress({
+      courseName,
+      tees,
+      playedOn,
+      notes,
+      holeCount,
+      layout,
+      drafts,
+      hole: pos.step === 'details' ? undefined : pos.hole,
+    });
+  }, [existing, courseName, tees, playedOn, notes, holeCount, layout, drafts, pos]);
 
   // Keep the screen on while entering holes on the course, where supported.
   useEffect(() => {
