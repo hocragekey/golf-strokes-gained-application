@@ -156,5 +156,9 @@ describe('card scan route', () => {
       { cardReader },
     );
     expect(unreadable.status).toBe(502);
+    const empty = await handle(scan({ mediaType: 'image/png', image: photo }), new MemoryRepo(), {
+      cardReader: { read: () => Promise.resolve({ ...result, holes: [] }) },
+    });
+    expect(empty.status).toBe(502);
   });
 });

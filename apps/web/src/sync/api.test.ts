@@ -16,12 +16,38 @@ afterEach(() => {
 
 describe('httpSyncApi.scanCard', () => {
   it('posts the photo with the Google token and parses the marks', async () => {
-    respond(200, { courseName: 'Pebble Creek', tees: '', holes: [] });
+    respond(200, {
+      courseName: 'Pebble Creek',
+      tees: '',
+      holes: [
+        {
+          number: 1,
+          par: 3,
+          yardage: 160,
+          score: 3,
+          drive: null,
+          putts: 2,
+          stats: '20',
+          unsure: false,
+        },
+      ],
+    });
     const api = httpSyncApi(() => Promise.resolve('token'), '/api');
     await expect(api.scanCard(photo)).resolves.toEqual({
       courseName: 'Pebble Creek',
       tees: '',
-      holes: [],
+      holes: [
+        {
+          number: 1,
+          par: 3,
+          yardage: 160,
+          score: 3,
+          drive: null,
+          putts: 2,
+          stats: '20',
+          unsure: false,
+        },
+      ],
     });
     const [url, init] = vi.mocked(fetch).mock.calls[0] ?? [];
     expect(url).toBe('/api/card-scan');

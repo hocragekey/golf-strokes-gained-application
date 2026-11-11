@@ -13,7 +13,22 @@ vi.mock('./image', () => ({
   preparePhoto: () => Promise.resolve({ mediaType: 'image/jpeg', image: 'AAAA' }),
 }));
 
-const result: CardScanResult = { courseName: 'Pebble Creek', tees: '', holes: [] };
+const result: CardScanResult = {
+  courseName: 'Pebble Creek',
+  tees: '',
+  holes: [
+    {
+      number: 1,
+      par: 3,
+      yardage: 160,
+      score: 3,
+      drive: null,
+      putts: 2,
+      stats: '20',
+      unsure: false,
+    },
+  ],
+};
 const file = new File(['x'], 'card.jpg', { type: 'image/jpeg' });
 const profile = { sub: '1', email: 'a@b.c', name: 'Al' };
 

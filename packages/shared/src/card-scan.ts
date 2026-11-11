@@ -37,6 +37,7 @@ export type ScannedHole = z.infer<typeof scannedHoleSchema>;
 export const cardScanResultSchema = z.object({
   courseName: z.string().max(100),
   tees: z.string().max(40),
-  holes: z.array(scannedHoleSchema).max(18),
+  /** At least one hole: an empty read means the card couldn't be read. */
+  holes: z.array(scannedHoleSchema).min(1).max(18),
 });
 export type CardScanResult = z.infer<typeof cardScanResultSchema>;
