@@ -68,3 +68,9 @@ test('prints the card guide', async ({ page }) => {
   await expect(page.getByRole('heading', { name: 'Pocket stat sheet' })).toBeVisible();
   await expect(page.getByRole('img', { name: 'QR code linking to the card guide' })).toBeVisible();
 });
+
+test('sync API refuses requests without a Google token', async ({ request }) => {
+  test.skip(!process.env.E2E_BASE_URL, 'Needs a deployed environment');
+  const res = await request.get('/api/sync');
+  expect(res.status()).toBe(401);
+});

@@ -9,7 +9,7 @@ permissions:
   contents: read
 
 # Concurrency is per job, not per workflow: a prod deploy waiting for approval must not hold up
-# release-please or dev deploys from later pushes. deploy-web.yml serializes each environment.
+# release-please or test runs from later pushes. deploy-web.yml serializes each environment.
 jobs:
   release-please:
     name: Release PR / tag
@@ -32,25 +32,34 @@ jobs:
           manifest-file: .release-please-manifest.json
 
   # AWS deploys stay off until the account is bootstrapped (docs/deploy-aws.md).
-  deploy-dev:
-    name: Deploy dev
+  # Every push to main: build once -> full test environment + Playwright -> promote to prod.
+  build:
+    name: Build
     if: vars.AWS_DEPLOY_ENABLED == 'true'
+    uses: ./.github/workflows/build-release.yml
+    with:
+      ref: ${{ github.sha }}
+
+  test:
+    name: Test environment
+    needs: build
     permissions:
       contents: read
       id-token: write
-    uses: ./.github/workflows/deploy-web.yml
+    uses: ./.github/workflows/test-env.yml
     with:
-      environment: dev
       ref: ${{ github.sha }}
+      artifact: ${{ needs.build.outputs.artifact }}
 
+  # The prod GitHub environment's protection rules decide whether this waits for an approval.
   deploy-prod:
-    name: Deploy prod
-    needs: [release-please, deploy-dev]
-    if: needs.release-please.outputs.released == 'true' && vars.AWS_DEPLOY_ENABLED == 'true'
+    name: Promote to prod
+    needs: [build, test]
     permissions:
       contents: read
       id-token: write
     uses: ./.github/workflows/deploy-web.yml
     with:
       environment: prod
-      ref: ${{ needs.release-please.outputs.tag }}
+      ref: ${{ github.sha }}
+      artifact: ${{ needs.build.outputs.artifact }}

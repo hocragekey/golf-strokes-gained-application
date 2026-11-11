@@ -1,13 +1,21 @@
 # Deploying to AWS
 
 The web app is a static, local-first PWA. Each person's rounds live in their own browser, so
-hosting is just S3 + CloudFront and there is no server or database to run. There are two
-environments:
+hosting is S3 + CloudFront plus the optional serverless sync API. Every push to `main` goes
+through one pipeline (ADR 0013):
 
-| Environment | Stack              | Deploys when                                    | Gate                        |
-| ----------- | ------------------ | ----------------------------------------------- | --------------------------- |
-| `dev`       | `golf-sg-web-dev`  | every push to `main`                            | none                        |
-| `prod`      | `golf-sg-web-prod` | a release-please release (after `dev` succeeds) | required reviewer in GitHub |
+```
+build once ──▶ test environment (created from scratch) ──▶ Playwright over HTTPS ──▶ tear down
+                                                                     │ pass
+                                                                     ▼
+                                                 promote the same build to prod
+```
+
+| Environment | Stacks                                 | Lifetime                       | Gate                        |
+| ----------- | -------------------------------------- | ------------------------------ | --------------------------- |
+| `test`      | `golf-sg-web-test`, `golf-sg-api-test` | one pipeline run, then deleted | none                        |
+| `prod`      | `golf-sg-web-prod`, `golf-sg-api-prod` | permanent                      | required reviewer in GitHub |
+| `dev`       | `golf-sg-web-dev`, `golf-sg-api-dev`   | legacy, no longer deployed     | none                        |
 
 ```
 GitHub Actions ──OIDC──▶ golf-sg-deploy-<env> role ──passes──▶ golf-sg-cfn-execution-<env> role
@@ -106,22 +114,48 @@ region is simplest.
    release-please PR deploys `prod` once you approve it. Each environment's URL appears on its
    GitHub deployment and in the `SiteUrl` stack output.
 
-## Custom domain (optional)
+## Test environment and promotion
 
-1. Request a DNS-validated ACM certificate in **us-east-1** for the hostname. For example, use
-   `golf.example.com` for prod and `dev.golf.example.com` for dev.
-2. Set environment variables on `dev` and/or `prod`:
-   - `DOMAIN_NAME`
-   - `ACM_CERTIFICATE_ARN`
-   - `HOSTED_ZONE_ID`: optional; set it if the zone is in Route 53 so the alias records are
-     created for you.
-3. Redeploy. If DNS isn't hosted in Route 53, point a CNAME at the distribution domain.
+`.github/workflows/release.yml` runs on every push to `main`:
+
+1. **Build** (`build-release.yml`): the web app and the sync Lambda are built once and uploaded as
+   the `release-<sha>` artifact (kept 90 days).
+2. **Test environment** (`test-env.yml`): clears anything a crashed run left behind, deploys the
+   artifact to brand-new `test` stacks (CloudFront, S3, API Gateway, Lambda, DynamoDB), runs the
+   whole Playwright suite against the live HTTPS URL (`E2E_BASE_URL`), then runs
+   `scripts/teardown-env.sh test`, pass or fail. A full cycle takes roughly 20-40 minutes, mostly
+   CloudFront creating and deleting the distribution.
+3. **Promote to prod** (`deploy-web.yml`): only after the test job passes, the same artifact is
+   deployed to prod. The `prod` GitHub environment's required reviewer approves it.
+
+Only one run holds the test environment at a time (concurrency group `test-environment`). A
+newer push waits; if several queue up, GitHub keeps only the newest waiting run, which contains
+the earlier commits. `test-env-cleanup.yml` runs nightly in the same group and deletes anything a
+cancelled run left behind.
+
+**Rollback:** re-run the `Promote to prod` job of an earlier Release run; it redeploys that run's
+artifact (while it is retained).
+
+## Custom domain
+
+Prod and test get fixed hostnames with one certificate. With a Route 53 public hosted zone for the
+domain (created automatically when the domain is registered in Route 53), run the bootstrap with
+`DOMAIN`:
+
+```bash
+DOMAIN=example.com ./scripts/aws-bootstrap.sh            # prod: example.com, test: test.example.com
+DOMAIN=example.com PROD_HOST=golf.example.com ./scripts/aws-bootstrap.sh
+```
+
+It deploys `infra/cloudformation/domain.yml` (a DNS-validated ACM certificate in us-east-1 for both
+hostnames) and sets `DOMAIN_NAME`, `ACM_CERTIFICATE_ARN` and `HOSTED_ZONE_ID` on the `test` and
+`prod` GitHub environments; the web stacks then add the Route 53 alias records. Add both
+`https://` origins to the Google OAuth client.
 
 ## Operations
 
-- **Rollback.** Re-run the `Deploy prod` job of an earlier Release workflow run. That
-  redeploys that release's tag. Hashed assets are never deleted, so clients on any recent
-  build keep working.
+- **Rollback.** Re-run the `Promote to prod` job of an earlier Release workflow run. Hashed
+  assets are never deleted, so clients on any recent build keep working.
 - **Template changes** go through PRs like code. CI runs `cfn-lint` and `checkov` on
   `infra/cloudformation`. Any skipped checkov rule carries a justification in the template's
   `Metadata`.

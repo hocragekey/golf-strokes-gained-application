@@ -1,7 +1,7 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Description: >-
   Golf Strokes Gained - one-time account bootstrap. GitHub Actions OIDC trust, per-environment
-  deploy roles, and the CloudFormation execution role that provisions the web stacks.
+  deploy roles (dev, test, prod), and the CloudFormation execution role that provisions the web stacks.
 
 Parameters:
   GitHubOwner:
@@ -279,6 +279,92 @@ Resources:
                 Action: s3:GetObject
                 Resource: !Sub arn:${AWS::Partition}:s3:::${ArtifactBucket}/prod/*
 
+  TestCfnExecutionRole:
+    Type: AWS::IAM::Role
+    Metadata:
+      checkov:
+        skip:
+          - id: CKV_AWS_111
+            comment: Only CloudFormation can assume it; S3 is scoped to this environment's bucket and CloudFront to this account.
+    Properties:
+      RoleName: !Sub ${AppName}-cfn-execution-test
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: cloudformation.amazonaws.com
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                aws:SourceAccount: !Ref AWS::AccountId
+      ManagedPolicyArns:
+        - !Ref CfnSharedPolicy
+      Policies:
+        - PolicyName: site-bucket
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Sid: SiteBucket
+                Effect: Allow
+                Action: s3:*
+                Resource:
+                  - !Sub arn:${AWS::Partition}:s3:::${AppName}-web-test-*
+        - PolicyName: sync-api
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Sid: Table
+                Effect: Allow
+                Action: dynamodb:*
+                Resource:
+                  - !Sub arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AppName}-api-test
+                  - !Sub arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AppName}-api-test/*
+              - Sid: Function
+                Effect: Allow
+                Action: lambda:*
+                Resource: !Sub arn:${AWS::Partition}:lambda:${AWS::Region}:${AWS::AccountId}:function:${AppName}-api-test*
+              - Sid: FunctionRole
+                Effect: Allow
+                Action:
+                  - iam:CreateRole
+                  - iam:DeleteRole
+                  - iam:GetRole
+                  - iam:UpdateRole
+                  - iam:UpdateAssumeRolePolicy
+                  - iam:PutRolePolicy
+                  - iam:GetRolePolicy
+                  - iam:DeleteRolePolicy
+                  - iam:ListRolePolicies
+                  - iam:ListAttachedRolePolicies
+                  - iam:TagRole
+                  - iam:UntagRole
+                Resource: !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:role/${AppName}-api-test-*
+              - Sid: PassFunctionRole
+                Effect: Allow
+                Action: iam:PassRole
+                Resource: !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:role/${AppName}-api-test-*
+                Condition:
+                  StringEquals:
+                    iam:PassedToService: lambda.amazonaws.com
+              - Sid: LogGroups
+                Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:DeleteLogGroup
+                  - logs:PutRetentionPolicy
+                  - logs:DeleteRetentionPolicy
+                  - logs:TagResource
+                  - logs:UntagResource
+                  - logs:ListTagsForResource
+                Resource:
+                  - !Sub arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/${AppName}-api-test*
+                  - !Sub arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/apigateway/${AppName}-api-test*
+              - Sid: Code
+                Effect: Allow
+                Action: s3:GetObject
+                Resource: !Sub arn:${AWS::Partition}:s3:::${ArtifactBucket}/test/*
+
   CfnSharedPolicy:
     Type: AWS::IAM::ManagedPolicy
     Metadata:
@@ -408,6 +494,35 @@ Resources:
       ManagedPolicyArns:
         - !Ref ProdDeployPolicy
 
+  TestDeployRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub ${AppName}-deploy-test
+      MaxSessionDuration: 3600
+      AssumeRolePolicyDocument: !Sub
+        - |
+          {
+            "Version": "2012-10-17",
+            "Statement": [{
+              "Effect": "Allow",
+              "Principal": { "Federated": "${Provider}" },
+              "Action": "sts:AssumeRoleWithWebIdentity",
+              "Condition": {
+                "StringEquals": {
+                  "token.actions.githubusercontent.com:aud": "sts.amazonaws.com",
+                  "token.actions.githubusercontent.com:sub": "${Subject}:environment:test"
+                }
+              }
+            }]
+          }
+        - Provider: !If [CreateOidcProvider, !Ref GitHubOidcProvider, !Ref ExistingOidcProviderArn]
+          Subject: !If
+            - UseImmutableSubject
+            - !Sub repo:${GitHubOwner}@${GitHubOwnerId}/${GitHubRepo}@${GitHubRepoId}
+            - !Sub repo:${GitHubOwner}/${GitHubRepo}
+      ManagedPolicyArns:
+        - !Ref TestDeployPolicy
+
   DevDeployPolicy:
     Type: AWS::IAM::ManagedPolicy
     Properties:
@@ -522,6 +637,83 @@ Resources:
               - cloudfront:GetInvalidation
             Resource: !Sub arn:${AWS::Partition}:cloudfront::${AWS::AccountId}:distribution/*
 
+  TestDeployPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      ManagedPolicyName: !Sub ${AppName}-deploy-test
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: WebStack
+            Effect: Allow
+            Action:
+              - cloudformation:CreateChangeSet
+              - cloudformation:DeleteChangeSet
+              - cloudformation:DescribeChangeSet
+              - cloudformation:ExecuteChangeSet
+              - cloudformation:DescribeStacks
+              - cloudformation:DescribeStackEvents
+              - cloudformation:GetTemplateSummary
+            Resource:
+              - !Sub arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/${AppName}-web-test/*
+              - !Sub arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/${AppName}-api-test/*
+              - !Sub arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:changeSet/*
+          - Sid: CleanUpFailedApiStack
+            Effect: Allow
+            Action: cloudformation:DeleteStack
+            Resource: !Sub arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/${AppName}-api-test/*
+          - Sid: TemplateValidation
+            Effect: Allow
+            Action: cloudformation:ValidateTemplate
+            Resource: '*'
+          - Sid: PassExecutionRole
+            Effect: Allow
+            Action: iam:PassRole
+            Resource: !GetAtt TestCfnExecutionRole.Arn
+            Condition:
+              StringEquals:
+                iam:PassedToService: cloudformation.amazonaws.com
+          - Sid: UploadSite
+            Effect: Allow
+            Action:
+              - s3:ListBucket
+              - s3:GetObject
+              - s3:PutObject
+              - s3:DeleteObject
+            Resource:
+              - !Sub arn:${AWS::Partition}:s3:::${AppName}-web-test-*
+              - !Sub arn:${AWS::Partition}:s3:::${AppName}-web-test-*/*
+          - Sid: UploadFunctionCode
+            Effect: Allow
+            Action: s3:PutObject
+            Resource: !Sub arn:${AWS::Partition}:s3:::${ArtifactBucket}/test/*
+          - Sid: Invalidate
+            Effect: Allow
+            Action:
+              - cloudfront:CreateInvalidation
+              - cloudfront:GetInvalidation
+            Resource: !Sub arn:${AWS::Partition}:cloudfront::${AWS::AccountId}:distribution/*
+          # The test environment is thrown away after every run (scripts/teardown-env.sh).
+          - Sid: Teardown
+            Effect: Allow
+            Action: cloudformation:DeleteStack
+            Resource: !Sub arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/${AppName}-web-test/*
+          - Sid: TeardownSiteBucket
+            Effect: Allow
+            Action:
+              - s3:ListBucketVersions
+              - s3:DeleteObjectVersion
+              - s3:DeleteBucket
+            Resource:
+              - !Sub arn:${AWS::Partition}:s3:::${AppName}-web-test-*
+              - !Sub arn:${AWS::Partition}:s3:::${AppName}-web-test-*/*
+          - Sid: TeardownTable
+            Effect: Allow
+            Action:
+              - dynamodb:DescribeTable
+              - dynamodb:DeleteTable
+            Resource: !Sub arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AppName}-api-test
+
 Outputs:
   DevCfnExecutionRoleArn:
     Description: GitHub environment variable AWS_CFN_EXECUTION_ROLE_ARN for the dev environment
@@ -535,6 +727,12 @@ Outputs:
   ProdDeployRoleArn:
     Description: GitHub environment variable AWS_DEPLOY_ROLE_ARN for the prod environment
     Value: !GetAtt ProdDeployRole.Arn
+  TestCfnExecutionRoleArn:
+    Description: GitHub environment variable AWS_CFN_EXECUTION_ROLE_ARN for the test environment
+    Value: !GetAtt TestCfnExecutionRole.Arn
+  TestDeployRoleArn:
+    Description: GitHub environment variable AWS_DEPLOY_ROLE_ARN for the test environment
+    Value: !GetAtt TestDeployRole.Arn
   ArtifactBucketName:
     Description: Bucket for Lambda bundles (deploy workflow computes the same name)
     Value: !Ref ArtifactBucket
