@@ -281,6 +281,12 @@ Resources:
 
   CfnSharedPolicy:
     Type: AWS::IAM::ManagedPolicy
+    Metadata:
+      cfn-lint:
+        config:
+          ignore_checks:
+            # apigateway:TagResource is required to tag HTTP API stages but is missing from cfn-lint's action list.
+            - W3037
     Properties:
       ManagedPolicyName: !Sub ${AppName}-cfn-execution-shared
       PolicyDocument:
@@ -325,6 +331,8 @@ Resources:
               - apigateway:PUT
               - apigateway:PATCH
               - apigateway:DELETE
+              - apigateway:TagResource
+              - apigateway:UntagResource
             Resource:
               - !Sub arn:${AWS::Partition}:apigateway:${AWS::Region}::/apis
               - !Sub arn:${AWS::Partition}:apigateway:${AWS::Region}::/apis/*
