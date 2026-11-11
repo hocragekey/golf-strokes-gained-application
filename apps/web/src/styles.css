@@ -798,6 +798,10 @@ button.choice:hover {
   border-color: var(--accent);
 }
 
+button.choice:not([aria-pressed='true']):hover {
+  background: color-mix(in srgb, var(--accent) 8%, var(--surface));
+}
+
 button.choice[aria-pressed='true'] {
   border-color: var(--accent);
   background: var(--accent);
@@ -1050,10 +1054,6 @@ button:not(.primary, .link, .choice, :disabled):hover,
 .button:not(.primary, .ghost):hover {
   border-color: var(--accent);
   color: var(--accent);
-}
-
-button.choice:hover {
-  background: color-mix(in srgb, var(--accent) 8%, var(--surface));
 }
 
 nav a {
