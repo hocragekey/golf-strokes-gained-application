@@ -49,6 +49,8 @@ const AccountContext = createContext<Account>(disabled);
 const PROFILE_KEY = 'golf-sg:profile';
 /** Debounce between a local change and pushing it. */
 const SYNC_DELAY_MS = 2000;
+/** Wait before retrying a failed sync while the app stays open (FR-SYNC-05). */
+const RETRY_DELAY_MS = 30_000;
 
 function storedProfile(): Profile | null {
   try {
@@ -149,6 +151,15 @@ export function AccountProvider({
     };
   }, [db, profile, sync]);
 
+  // Nobody sees sync errors, so keep retrying quietly while the app stays open.
+  useEffect(() => {
+    if (!profile || status.state !== 'error') return;
+    const timer = setTimeout(() => void sync(), RETRY_DELAY_MS);
+    return () => {
+      clearTimeout(timer);
+    };
+  }, [profile, status.state, sync]);
+
   // Sync on start, on reconnect and when the app comes back to the foreground (FR-SYNC-03).
   useEffect(() => {
     if (!profile) return;
@@ -188,9 +199,7 @@ export function AccountProvider({
   const signOut = useCallback(async () => {
     await exclusive(async () => {
       if ((await engine.pendingCount()) > 0) await engine.run().catch(() => undefined);
-      // Rounds leave the device once they are in the account (FR-ACCT-03); anything not yet
-      // uploaded stays, with its outbox, and uploads at the next sign-in.
-      await engine.reset((await engine.pendingCount()) === 0);
+      await engine.signOut();
       session.current = null;
       profileRef.current = null;
     });

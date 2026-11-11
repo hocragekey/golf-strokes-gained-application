@@ -97,19 +97,30 @@ describe('SyncEngine', () => {
     expect(await a.engine.pendingCount()).toBeGreaterThan(0);
   });
 
-  it('re-uploads everything when a different account signs in, and reset clears state', async () => {
+  it("never uploads one account's leftovers into another account", async () => {
+    const { api } = fakeServer();
+    const a = device(api);
+    await a.store.saveRound(roundInput([par4]));
+    await a.engine.adopt('alice');
+    await a.engine.adopt('bob');
+    expect(await a.store.db.rounds.count()).toBe(0);
+    expect(await a.engine.pendingCount()).toBe(0);
+    expect(await a.engine.meta('cursor')).toBeUndefined();
+  });
+
+  it('signs out keeping only unsent data, or clearing everything once uploaded', async () => {
     const { api } = fakeServer();
     const a = device(api);
     await a.store.saveRound(roundInput([par4]));
     await a.engine.adopt('alice');
     await a.engine.run();
-    await a.engine.adopt('bob');
-    expect(await a.engine.pendingCount()).toBe(1);
-    expect(await a.engine.meta('cursor')).toBeUndefined();
-    await a.engine.reset(false);
-    expect(await a.engine.pendingCount()).toBe(1);
-    await a.engine.reset(true);
+    const unsent = await a.store.saveRound(roundInput([par4]));
+    await a.engine.signOut();
+    expect((await a.store.db.rounds.toArray()).map((r) => r.id)).toEqual([unsent.round.id]);
+    expect(await a.engine.meta('syncedSub')).toBe('alice');
+    await a.engine.run();
+    await a.engine.signOut();
     expect(await a.store.db.rounds.count()).toBe(0);
-    expect(await a.engine.pendingCount()).toBe(0);
+    expect(await a.engine.meta('syncedSub')).toBeUndefined();
   });
 });
