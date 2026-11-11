@@ -108,6 +108,18 @@ describe('SyncEngine', () => {
     expect(await a.engine.meta('cursor')).toBeUndefined();
   });
 
+  it('keeps rounds saved while signed out when another account adopts the leftovers', async () => {
+    const { api } = fakeServer();
+    const a = device(api);
+    await a.engine.adopt('alice');
+    await a.store.saveRound(roundInput([par4]));
+    await a.engine.signOut();
+    const mine = await a.store.saveRound(roundInput([par4]));
+    await a.engine.adopt('bob');
+    expect((await a.store.db.rounds.toArray()).map((r) => r.id)).toEqual([mine.round.id]);
+    expect(await a.engine.pendingCount()).toBe(1);
+  });
+
   it('signs out keeping only unsent data, or clearing everything once uploaded', async () => {
     const { api } = fakeServer();
     const a = device(api);
@@ -118,7 +130,11 @@ describe('SyncEngine', () => {
     await a.engine.signOut();
     expect((await a.store.db.rounds.toArray()).map((r) => r.id)).toEqual([unsent.round.id]);
     expect(await a.engine.meta('syncedSub')).toBe('alice');
+    expect(await a.engine.meta('cursor')).toBeUndefined();
+    await a.engine.adopt('alice');
+    expect(await a.engine.meta('leftovers')).toBeUndefined();
     await a.engine.run();
+    expect(await a.store.db.rounds.count()).toBe(2);
     await a.engine.signOut();
     expect(await a.store.db.rounds.count()).toBe(0);
     expect(await a.engine.meta('syncedSub')).toBeUndefined();
