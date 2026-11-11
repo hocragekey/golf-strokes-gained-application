@@ -67,13 +67,13 @@ Priority uses MoSCoW. Status: ✅ implemented · ◐ partial · 🚧 in progress
 
 ### 5.1 Card capture (scorecard-agnostic)
 
-| ID         | Requirement                                                                                                                                                                                                         | Priority | Status |
-| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- | ------ |
-| FR-CARD-01 | The app defines a **one-line-per-hole notation** in a fixed order (`Score · Tee · Approach · Green · Short game · Putts · Penalties`) that fits in a single scorecard column, spare row, margin, or scrap of paper. | Must     | ✅     |
-| FR-CARD-02 | The card guide explains every field, when it applies (e.g. tee result only on par 4/5), and shows worked examples for a par 3, 4 and 5.                                                                             | Must     | ✅     |
-| FR-CARD-03 | A **printable pocket stat sheet** (18 rows, one column per field, with a notation legend) for courses whose card has no room.                                                                                       | Must     | ✅     |
-| FR-CARD-04 | The pocket sheet carries a **QR code** to the card guide of the environment it was printed from, generated on-device (works offline).                                                                               | Should   | ✅     |
-| FR-CARD-05 | The notation captures exactly the fields the SG engine needs (FR-ENTRY-02), nothing more.                                                                                                                           | Must     | ✅     |
+| ID         | Requirement                                                                                                                                                                                                           | Priority | Status |
+| ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- | ------ |
+| FR-CARD-01 | The app defines a **one-line-per-hole notation** in a fixed order (`Score · Drive · Approach · Green · Short game · Putts · Penalties`) that fits in a single scorecard column, spare row, margin, or scrap of paper. | Must     | ✅     |
+| FR-CARD-02 | The card guide explains every field, when it applies (e.g. tee result only on par 4/5), and shows worked examples for a par 3, 4 and 5.                                                                               | Must     | ✅     |
+| FR-CARD-03 | A **printable pocket stat sheet** (18 rows, one column per field, with a notation legend) for courses whose card has no room.                                                                                         | Must     | ✅     |
+| FR-CARD-04 | The pocket sheet carries a **QR code** to the card guide of the environment it was printed from, generated on-device (works offline).                                                                                 | Should   | ✅     |
+| FR-CARD-05 | The notation captures exactly the fields the SG engine needs (FR-ENTRY-02), nothing more.                                                                                                                             | Must     | ✅     |
 
 ### 5.2 Course data
 

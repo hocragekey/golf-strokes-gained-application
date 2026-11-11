@@ -21,7 +21,11 @@ export function SgBars({ sg }: { sg: SgCategories }) {
             <span className="sg-track" aria-hidden="true">
               <span
                 className={`sg-fill ${sgClass(value)}`}
-                style={value < 0 ? { right: '50%', width } : { left: '50%', width }}
+                style={
+                  value < 0
+                    ? { right: '50%', width, transformOrigin: 'right' }
+                    : { left: '50%', width, transformOrigin: 'left' }
+                }
               />
             </span>
             <SgValue value={value} />
