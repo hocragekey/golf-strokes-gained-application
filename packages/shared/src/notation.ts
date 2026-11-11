@@ -112,7 +112,9 @@ export function parseCardMarks(marks: CardMarks, par: number): NotationResult {
  */
 export function parseHoleNotation(line: string, par: number): NotationResult {
   // Plain token splitting (no backtracking regex) keeps parsing linear on any input.
-  const tokens = line.trim().slice(0, 120).split(/\s+/);
+  if (line.length > 120) return { ok: false, error: 'That line is too long for one hole' };
+  // Slashes may be typed without spaces (`5 R 2/175/8`).
+  const tokens = line.trim().replaceAll('/', ' / ').split(/\s+/);
   const isNumber = (t: string | undefined) => t !== undefined && /^\d{1,3}$/.test(t);
   let i = 0;
   const score = tokens[i++];
