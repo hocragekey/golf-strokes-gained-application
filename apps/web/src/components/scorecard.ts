@@ -13,7 +13,6 @@ export interface HoleDraft {
   teeResult: string;
   approachYards: string;
   approachLie: string;
-  gir: boolean;
   missDirection: string;
   shortGameShots: string;
   shortGameYards: string;
@@ -28,7 +27,6 @@ export const emptyDraft = (): HoleDraft => ({
   teeResult: '',
   approachYards: '',
   approachLie: 'fairway',
-  gir: false,
   missDirection: '',
   shortGameShots: '0',
   shortGameYards: '',
@@ -46,7 +44,6 @@ export function draftFromEntry(entry: HoleEntry): HoleDraft {
     teeResult: str(entry.teeResult),
     approachYards: str(entry.approachYards),
     approachLie: entry.approachLie,
-    gir: entry.gir,
     missDirection: str(entry.missDirection),
     shortGameShots: str(entry.shortGameShots),
     shortGameYards: str(entry.shortGameYards),
@@ -62,16 +59,25 @@ const opt = (v: string): string | null => (v === '' ? null : v);
 
 export const isBlank = (d: HoleDraft): boolean => d.score.trim() === '';
 
+/** On the green in regulation, worked out from the score and putts (no need to ask). */
+export function isGir(d: HoleDraft, par: number): boolean {
+  const score = num(d.score);
+  const putts = num(d.putts);
+  if (score === null || putts === null || (num(d.shortGameShots) ?? 0) > 0) return false;
+  return score - Math.max(putts, 1) <= par - 2;
+}
+
 export function draftToInput(d: HoleDraft, hole: CourseHole): HoleEntryInput {
   const isPar3 = hole.par === 3;
+  const gir = isGir(d, hole.par);
   return {
     holeNumber: hole.number,
     score: num(d.score) ?? Number.NaN,
     teeResult: isPar3 ? null : (opt(d.teeResult) as HoleEntryInput['teeResult']),
     approachYards: isPar3 ? null : num(d.approachYards),
     approachLie: (isPar3 ? 'tee' : d.approachLie) as HoleEntryInput['approachLie'],
-    gir: d.gir,
-    missDirection: d.gir ? null : (opt(d.missDirection) as HoleEntryInput['missDirection']),
+    gir,
+    missDirection: gir ? null : (opt(d.missDirection) as HoleEntryInput['missDirection']),
     shortGameShots: num(d.shortGameShots) ?? 0,
     shortGameYards: num(d.shortGameYards),
     // Card notation: no lie letter means the first short-game shot was from the fairway.

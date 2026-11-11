@@ -11,6 +11,7 @@ import {
   type ReactNode,
 } from 'react';
 import type { GolfDb } from '../data/db';
+import { clearInProgress } from '../data/inProgress';
 import { AuthRequiredError, httpSyncApi, type SyncApi } from '../sync/api';
 import { SyncEngine } from '../sync/engine';
 import type { AuthClient, Profile, Session } from './google';
@@ -205,6 +206,7 @@ export function AccountProvider({
     });
     client.signOut();
     localStorage.removeItem(PROFILE_KEY);
+    clearInProgress();
     setProfile(null);
     setStatus((s) => ({ state: 'idle', pending: s.pending }));
     await queryClient.invalidateQueries();
