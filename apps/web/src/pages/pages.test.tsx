@@ -48,6 +48,7 @@ describe('Dashboard', () => {
     );
     expect(screen.getByText('100–150 yds')).toBeInTheDocument();
     await userEvent.selectOptions(screen.getByLabelText('Range'), '0');
+    expect(screen.queryByText('Loading…')).not.toBeInTheDocument();
     expect(screen.getByLabelText('Range')).toHaveValue('0');
   });
 
@@ -56,6 +57,8 @@ describe('Dashboard', () => {
     renderWithProviders(<Dashboard />, { store });
     expect(await screen.findByText(/vs PGA Tour baseline/)).toBeInTheDocument();
     await userEvent.selectOptions(screen.getByLabelText('Compare against'), 'scratch');
+    expect(screen.queryByText('Loading…')).not.toBeInTheDocument();
+    expect(screen.getByText('Practice priorities')).toBeInTheDocument();
     expect(await screen.findByText(/vs Scratch \(est\.\) baseline/)).toBeInTheDocument();
     expect(localStorage.getItem('golf-sg.baseline')).toBe('scratch');
     localStorage.clear();

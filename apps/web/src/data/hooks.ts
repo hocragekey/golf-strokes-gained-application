@@ -1,5 +1,5 @@
 import type { RoundInput } from '@golf-sg/shared';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useStore } from './context';
 import { useBaselineId } from './preferences';
 
@@ -16,6 +16,7 @@ export function useRounds() {
   return useQuery({
     queryKey: queryKeys.rounds(baselineId),
     queryFn: () => store.listRounds(baselineId),
+    placeholderData: keepPreviousData,
   });
 }
 
@@ -26,6 +27,9 @@ export function useRound(id: string | undefined) {
     queryKey: queryKeys.round(id ?? '', baselineId),
     queryFn: () => store.getRound(id ?? '', baselineId),
     enabled: id !== undefined,
+    // Keep the page up while the baseline changes, but never show another round's data.
+    placeholderData: (previous, previousQuery) =>
+      previousQuery?.queryKey[1] === id ? previous : undefined,
   });
 }
 
@@ -35,6 +39,8 @@ export function useStats(limit?: number) {
   return useQuery({
     queryKey: queryKeys.stats(limit, baselineId),
     queryFn: () => store.getStats(limit, baselineId),
+    // Changing the range or baseline must not blank the page while the new numbers load.
+    placeholderData: keepPreviousData,
   });
 }
 
