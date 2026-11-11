@@ -6,7 +6,7 @@ import { sessionFromToken, type AuthClient } from '../auth/google';
 import { fakeServer } from '../test/fake-server';
 import { par4, roundInput } from '../test/fixtures';
 import { createTestStore, renderWithProviders } from '../test/render';
-import { Account, syncLabel } from './Account';
+import { Account } from './Account';
 
 const b64url = (o: object) =>
   btoa(JSON.stringify(o)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
@@ -65,35 +65,25 @@ describe('sessionFromToken', () => {
   });
 });
 
-describe('syncLabel', () => {
-  it('describes each sync state', () => {
-    expect(syncLabel({ state: 'idle', pending: 0 })).toBe('Synced');
-    expect(syncLabel({ state: 'idle', pending: 3 })).toBe('3 changes waiting');
-    expect(syncLabel({ state: 'offline', pending: 1 })).toBe(
-      'Offline, will sync later · 1 change waiting',
-    );
-    expect(syncLabel({ state: 'signin', pending: 0 })).toBe('Sign in again to sync');
-  });
-});
-
 describe('Account page', () => {
   it('explains that accounts are off when no client ID is configured', () => {
     setup(fakeClient(false));
-    expect(screen.getByText(/not set up in this build/)).toBeInTheDocument();
+    expect(screen.getByText(/isn't available in this build/)).toBeInTheDocument();
   });
 
-  it('signs in, uploads rounds already on the device and shows the sync status', async () => {
+  it('signs in and uploads rounds already on the device without showing sync controls', async () => {
     const { store, server } = setup();
     await store.saveRound(roundInput([par4]));
     await userEvent.click(await screen.findByRole('button', { name: 'Fake Google' }));
     expect(await screen.findByText('Pat Golfer')).toBeInTheDocument();
     await waitFor(() => {
-      expect(screen.getByRole('status')).toHaveTextContent(/^Synced/);
+      expect(server.items.size).toBe(1);
     });
-    expect(server.items.size).toBe(1);
+    expect(screen.queryByRole('button', { name: 'Sync now' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
   });
 
-  it('signs out and optionally removes rounds from the device', async () => {
+  it('signs out and removes uploaded rounds from the device', async () => {
     const { store } = setup();
     await store.saveRound(roundInput([par4]));
     await userEvent.click(await screen.findByRole('button', { name: 'Fake Google' }));
@@ -102,7 +92,7 @@ describe('Account page', () => {
     expect(await store.db.rounds.count()).toBe(0);
   });
 
-  it('deletes account data after confirmation and keeps local rounds', async () => {
+  it('deletes account data on the server and the device after confirmation', async () => {
     const { store, server } = setup();
     await store.saveRound(roundInput([par4]));
     vi.spyOn(window, 'confirm').mockReturnValue(true);
@@ -116,27 +106,24 @@ describe('Account page', () => {
       await screen.findByRole('button', { name: 'Fake Google' }, { timeout: 5000 }),
     ).toBeInTheDocument();
     expect(server.items.size).toBe(0);
-    expect(await store.db.rounds.count()).toBe(1);
-
-    // Signing back in must not restore the deleted account data from this device.
-    await userEvent.click(screen.getByRole('button', { name: 'Fake Google' }));
-    await waitFor(() => {
-      expect(screen.getByRole('status')).toHaveTextContent(/^Synced/);
-    });
-    expect(server.items.size).toBe(0);
+    expect(await store.db.rounds.count()).toBe(0);
   });
 
-  it('refuses to remove rounds from the device while changes have not uploaded', async () => {
+  it('keeps unsent rounds on sign-out and uploads them at the next sign-in', async () => {
     const { store, server } = setup();
+    const push = server.api.push.bind(server.api);
     server.api.push = () => Promise.reject(new Error('No signal'));
     await store.saveRound(roundInput([par4]));
     await userEvent.click(await screen.findByRole('button', { name: 'Fake Google' }));
-    await waitFor(() => {
-      expect(screen.getByRole('status')).toHaveTextContent(/Sync problem/);
-    });
-    await userEvent.click(screen.getByRole('button', { name: 'Sign out' }));
-    expect(await screen.findByRole('alert')).toHaveTextContent(/1 change has not uploaded yet/);
+    await userEvent.click(await screen.findByRole('button', { name: 'Sign out' }));
+    expect(await screen.findByRole('button', { name: 'Fake Google' })).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
     expect(await store.db.rounds.count()).toBe(1);
-    expect(screen.getByText('Pat Golfer')).toBeInTheDocument();
+
+    server.api.push = push;
+    await userEvent.click(screen.getByRole('button', { name: 'Fake Google' }));
+    await waitFor(() => {
+      expect(server.items.size).toBe(1);
+    });
   });
 });

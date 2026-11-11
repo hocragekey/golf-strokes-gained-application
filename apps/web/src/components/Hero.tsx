@@ -44,7 +44,7 @@ const STEPS = [
   },
   {
     title: 'After the round',
-    text: 'We ask one question at a time, hole by hole. No course setup, works offline.',
+    text: 'We ask one question at a time, hole by hole. No course setup.',
   },
 ];
 

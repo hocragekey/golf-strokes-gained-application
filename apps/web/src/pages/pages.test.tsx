@@ -1,10 +1,9 @@
-import { screen, waitFor } from '@testing-library/react';
+import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { App } from '../App';
 import { par3ThreePutt, par4, roundInput } from '../test/fixtures';
 import { createTestStore, renderWithProviders } from '../test/render';
-import { Backup } from './Backup';
 import { CardGuide } from './CardGuide';
 import { Dashboard } from './Dashboard';
 import { RoundDetail } from './RoundDetail';
@@ -180,26 +179,12 @@ describe('RoundEntry', () => {
   });
 });
 
-describe('Backup', () => {
-  it('downloads all data as a JSON file', async () => {
-    const createObjectURL = vi.fn(() => 'blob:data');
-    Object.assign(URL, { createObjectURL, revokeObjectURL: vi.fn() });
-    const click = vi
-      .spyOn(HTMLAnchorElement.prototype, 'click')
-      .mockImplementation(() => undefined);
-    const { store } = await seeded();
-    renderWithProviders(<Backup />, { store });
-    expect(screen.queryByLabelText(/Import/)).not.toBeInTheDocument();
-    await userEvent.click(screen.getByRole('button', { name: 'Download my data' }));
-    expect(await screen.findByText('Downloaded 1 round.')).toBeInTheDocument();
-    expect(click).toHaveBeenCalled();
-  });
-});
-
 describe('App shell', () => {
-  it('redirects the old backup link to My data', async () => {
+  it('sends old data links home', async () => {
     renderWithProviders(<App />, { route: '/backup' });
-    expect(await screen.findByRole('heading', { name: 'My data' })).toBeInTheDocument();
+    expect(
+      await screen.findByRole('heading', { name: 'Improve your golf game' }),
+    ).toBeInTheDocument();
   });
 
   it('prints the card guide', async () => {
@@ -215,14 +200,12 @@ describe('App shell', () => {
     expect(screen.getAllByRole('row')).toHaveLength(7 + 1 + 3 + 18 + 1);
   });
 
-  it('shows not found and the offline badge', async () => {
+  it('shows not found without surfacing storage or connectivity', () => {
     vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false);
     renderWithProviders(<App />, { route: '/nope' });
     expect(screen.getByText('Page not found')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Card guide' })).toBeInTheDocument();
-    expect(screen.getByRole('status')).toHaveTextContent('Offline');
-    await waitFor(() => {
-      expect(screen.getByRole('link', { name: 'My data' })).toHaveAttribute('href', '/data');
-    });
+    expect(screen.queryByText(/Offline/)).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'My data' })).not.toBeInTheDocument();
   });
 });

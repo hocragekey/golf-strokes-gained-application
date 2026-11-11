@@ -457,14 +457,6 @@ button.danger {
   }
 }
 
-.offline-badge {
-  font-size: 0.8rem;
-  color: var(--gold);
-  border: 1px solid currentcolor;
-  border-radius: 0;
-  padding: 0.15rem 0.6rem;
-}
-
 .notation-pattern {
   font-size: 1.05rem;
 }
@@ -1003,29 +995,14 @@ nav a.nav-cta:not(.active) {
   border-radius: 50%;
 }
 
-.sync-line {
-  font-weight: 600;
-}
-
-.sync-error,
-.sync-signin {
-  color: var(--neg);
-}
-
-.checkbox {
-  display: flex;
-  gap: 0.5rem;
-  align-items: center;
-}
-
 .button.secondary {
   background: transparent;
   color: inherit;
   border: var(--border-width) solid var(--border);
 }
 
-.nav-attention::after {
-  content: ' •';
+.nav-attention::before {
+  content: '• ';
   color: var(--neg);
 }
 

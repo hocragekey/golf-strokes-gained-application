@@ -30,9 +30,8 @@ export interface Account {
   status: SyncStatus;
   renderButton: (el: HTMLElement) => Promise<void>;
   signIn: (session: Session) => Promise<void>;
-  signOut: (removeData: boolean) => Promise<void>;
+  signOut: () => Promise<void>;
   deleteAccount: () => Promise<void>;
-  syncNow: () => Promise<void>;
 }
 
 const noop = () => Promise.resolve();
@@ -44,7 +43,6 @@ const disabled: Account = {
   signIn: noop,
   signOut: noop,
   deleteAccount: noop,
-  syncNow: noop,
 };
 
 const AccountContext = createContext<Account>(disabled);
@@ -187,30 +185,21 @@ export function AccountProvider({
     [exclusive, engine],
   );
 
-  const signOut = useCallback(
-    async (removeData: boolean) => {
-      await exclusive(async () => {
-        if (removeData && (await engine.pendingCount()) > 0) {
-          await engine.run().catch(() => undefined);
-          const left = await engine.pendingCount();
-          if (left > 0) {
-            throw new Error(
-              `${String(left)} change${left === 1 ? ' has' : 's have'} not uploaded yet. Sync when you have signal, or sign out keeping your rounds on this device.`,
-            );
-          }
-        }
-        await engine.reset(removeData);
-        session.current = null;
-        profileRef.current = null;
-      });
-      client.signOut();
-      localStorage.removeItem(PROFILE_KEY);
-      setProfile(null);
-      setStatus((s) => ({ state: 'idle', pending: s.pending }));
-      await queryClient.invalidateQueries();
-    },
-    [client, exclusive, engine, queryClient],
-  );
+  const signOut = useCallback(async () => {
+    await exclusive(async () => {
+      if ((await engine.pendingCount()) > 0) await engine.run().catch(() => undefined);
+      // Rounds leave the device once they are in the account (FR-ACCT-03); anything not yet
+      // uploaded stays, with its outbox, and uploads at the next sign-in.
+      await engine.reset((await engine.pendingCount()) === 0);
+      session.current = null;
+      profileRef.current = null;
+    });
+    client.signOut();
+    localStorage.removeItem(PROFILE_KEY);
+    setProfile(null);
+    setStatus((s) => ({ state: 'idle', pending: s.pending }));
+    await queryClient.invalidateQueries();
+  }, [client, exclusive, engine, queryClient]);
 
   // Stable identity so the page renders Google's button once, not on every status change.
   const renderButton = useCallback(
@@ -226,7 +215,7 @@ export function AccountProvider({
       await api.deleteAccount();
       await engine.forgetServerCopy();
     });
-    await signOut(false);
+    await signOut();
   }, [exclusive, api, engine, signOut]);
 
   const value = useMemo<Account>(
@@ -240,10 +229,9 @@ export function AccountProvider({
             signIn,
             signOut,
             deleteAccount,
-            syncNow: sync,
           }
         : disabled,
-    [client, profile, status, renderButton, signIn, signOut, deleteAccount, sync],
+    [client, profile, status, renderButton, signIn, signOut, deleteAccount],
   );
   return <AccountContext value={value}>{children}</AccountContext>;
 }

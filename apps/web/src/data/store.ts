@@ -1,10 +1,8 @@
 import {
   computeStats,
   getBaseline,
-  courseSchema,
   roundInputSchema,
   roundIssues,
-  roundSchema,
   summarizeRound,
   type EntryIssue,
   type Round,
@@ -14,7 +12,7 @@ import {
   type Stats,
 } from '@golf-sg/shared';
 import { changeKey, type SyncKind } from '@golf-sg/shared';
-import { z, type ZodType } from 'zod';
+import type { ZodType } from 'zod';
 import { GolfDb } from './db';
 
 export class StoreError extends Error {
@@ -26,17 +24,6 @@ export class StoreError extends Error {
     this.name = 'StoreError';
   }
 }
-
-export const BACKUP_VERSION = 2;
-
-export const backupSchema = z.object({
-  app: z.literal('golf-strokes-gained'),
-  version: z.literal(BACKUP_VERSION),
-  exportedAt: z.iso.datetime(),
-  courses: z.array(courseSchema),
-  rounds: z.array(roundSchema),
-});
-export type Backup = z.infer<typeof backupSchema>;
 
 function parse<T>(schema: ZodType<T>, data: unknown): T {
   const result = schema.safeParse(data);
@@ -118,20 +105,5 @@ export class LocalStore {
 
   async getStats(limit?: number, baselineId?: string): Promise<Stats> {
     return computeStats(await this.rounds(limit), getBaseline(baselineId));
-  }
-
-  /** Everything stored on this device, as a versioned JSON document (FR-DATA-02). */
-  async exportBackup(): Promise<Backup> {
-    const [courses, rounds] = await Promise.all([
-      this.db.courses.toArray(),
-      this.db.rounds.toArray(),
-    ]);
-    return {
-      app: 'golf-strokes-gained',
-      version: BACKUP_VERSION,
-      exportedAt: now(),
-      courses,
-      rounds,
-    };
   }
 }

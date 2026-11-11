@@ -38,8 +38,8 @@ code and tests.
 | -------------------------- | ------------------------------------------------------------------------------------------------ |
 | `packages/shared/src`      | `schemas.ts` (Zod contracts), `baseline.ts`, `strokes-gained.ts`, `validation.ts`, `insights.ts` |
 | `apps/web/src/data`        | `db.ts` (Dexie schema), `store.ts` (LocalStore), `hooks.ts` (queries), `preferences.ts`          |
-| `apps/web/src/pages`       | Route components: Dashboard, Rounds, RoundEntry, RoundDetail, CardGuide, Backup ("My data")      |
-| `apps/web/src/components`  | `Sg` (bars/values), `BaselineSelect`, `QrCode`, `OfflineBadge`, scorecard helpers                |
+| `apps/web/src/pages`       | Route components: Dashboard, Rounds, RoundEntry, RoundDetail, CardGuide, Account                 |
+| `apps/web/src/components`  | `Sg` (bars/values), `BaselineSelect`, `QrCode`, scorecard helpers                                |
 | `apps/sync/src`            | Sync API Lambda: handler, DynamoDB repository (section 13.1)                                     |
 | `infra/cloudformation`     | `bootstrap.yml` (OIDC + IAM), `web.yml` (S3 + CloudFront per environment)                        |
 | `scripts/aws-bootstrap.sh` | One-command AWS + GitHub environment setup                                                       |
@@ -112,11 +112,6 @@ The card notation (FR-CARD-01) maps one-to-one onto these fields:
 - **Preferences:** per-device UI preferences (comparison baseline) live in `localStorage`
   (`golf-sg.baseline`), not IndexedDB, because they are not user data and will not sync.
 - **API:** stores no data. Server-side persistence arrives with Phase 2 sync (§13).
-
-### Data download (FR-DATA-02)
-
-"Download my data" writes `{ app: 'golf-strokes-gained', version: 2, exportedAt, courses: Course[], rounds: Round[] }`
-(`backupSchema`). There is no import: signing in moves rounds between devices (FR-SYNC-01..03).
 
 ## 4. Strokes-gained engine (FR-SG-01, NFR-PORT-01)
 
@@ -197,14 +192,14 @@ well inside NFR-PERF-01's 100 ms phone budget.
 
 ### 7.1 Routes
 
-| Path                              | Page        | PRD                            |
-| --------------------------------- | ----------- | ------------------------------ |
-| `/`                               | Dashboard   | FR-HOME-01..04, FR-SG-02..07   |
-| `/rounds`                         | Rounds      | FR-ENTRY-04, FR-SG-06          |
-| `/rounds/new`, `/rounds/:id/edit` | RoundEntry  | FR-ENTRY-01..06                |
-| `/rounds/:id`                     | RoundDetail | FR-SG-01, FR-SG-07, FR-HOME-03 |
-| `/guide`                          | CardGuide   | FR-CARD-01..05                 |
-| `/data`                           | Backup      | FR-DATA-02                     |
+| Path                              | Page            | PRD                            |
+| --------------------------------- | --------------- | ------------------------------ |
+| `/`                               | Dashboard       | FR-HOME-01..04, FR-SG-02..07   |
+| `/rounds`                         | Rounds          | FR-ENTRY-04, FR-SG-06          |
+| `/rounds/new`, `/rounds/:id/edit` | RoundEntry      | FR-ENTRY-01..06                |
+| `/rounds/:id`                     | RoundDetail     | FR-SG-01, FR-SG-07, FR-HOME-03 |
+| `/guide`                          | CardGuide       | FR-CARD-01..05                 |
+| `/data`, `/backup`                | redirect to `/` | FR-DATA-02 (removed)           |
 
 `BrowserRouter` uses `import.meta.env.BASE_URL`, so the app can be hosted at a sub-path.
 
@@ -229,7 +224,7 @@ well inside NFR-PERF-01's 100 ms phone budget.
 - `navigator.storage.persist()` is requested at startup.
 - Hosting serves `index.html` and `sw.js` with no-cache and hashed assets as immutable, so a new
   release is picked up on the next launch while old clients keep loading their own assets.
-- `OfflineBadge` listens to `online`/`offline` events and shows "Offline · everything still works".
+- Connectivity is never shown in the UI (FR-PWA-03 removed); sync retries on `online` and focus.
 
 ### 7.4 Card guide and pocket sheet (FR-CARD-01..05)
 
@@ -324,8 +319,8 @@ Region `us-east-1` (CloudFront certificates must live there). Step-by-step: [dep
 | FR-SG-01                | `shared/strokes-gained.ts`                                                                                              | `strokes-gained.test.ts` (sum invariant)                                               |
 | FR-SG-02..06            | `shared/insights.ts`, `pages/Dashboard.tsx`                                                                             | `insights.test.ts`, `pages.test.tsx`, E2E                                              |
 | FR-SG-07                | `shared/baseline.ts` (`scratchBaseline`, `getBaseline`), `data/preferences.ts`, `components/BaselineSelect.tsx`         | `baseline.test.ts`, `store.test.ts`, `pages.test.tsx`                                  |
-| FR-DATA-01..04          | `data/db.ts`, `data/store.ts`, `pages/Backup.tsx`, `main.tsx`                                                           | `store.test.ts`, `pages.test.tsx` (Backup)                                             |
-| FR-PWA-01..04           | `vite.config.ts`, `components/OfflineBadge.tsx`, `web.yml` cache behaviors                                              | E2E offline test, deploy smoke test                                                    |
+| FR-DATA-01..04          | `data/db.ts`, `data/store.ts`, `main.tsx`                                                                               | `store.test.ts`                                                                        |
+| FR-PWA-01..04           | `vite.config.ts`, `web.yml` cache behaviors                                                                             | E2E offline test, deploy smoke test                                                    |
 | FR-ACCT-01..05          | `auth/google.ts`, `auth/context.tsx`, `pages/Account.tsx`, `App.tsx`, `config/app.json`                                 | `account.test.tsx`                                                                     |
 | FR-SYNC-01..06          | `shared/sync.ts`, `apps/sync/src/*`, `data/db.ts` (v3), `store.ts` (outbox), `sync/engine.ts`, `sync/api.ts`, `api.yml` | `sync.test.ts`, `handler.test.ts`, `*-repo.test.ts` (DynamoDB Local), `engine.test.ts` |
 | NFR-SEC-01, NFR-OPS-01  | `infra/cloudformation/*`, `deploy-web.yml`, `release.yml`, `scripts/aws-bootstrap.sh`                                   | cfn-lint, checkov, deploy smoke test                                                   |
@@ -393,7 +388,7 @@ repository interface, so it is tested against an in-memory repository and Dynamo
 **Client.** Dexie version 3 adds `pending` (outbox keyed `kind:id`) and `meta` (sync cursor and
 the `sub` the device last synced as). Every local save and delete records a pending
 entry. The sync engine runs on sign-in, on the `online` event, when the tab becomes visible, a few
-seconds after a local change, and on "Sync now":
+seconds after a local change:
 
 1. Push pending entries (current entity, or a tombstone if it is gone), in batches of 100.
 2. Remove pending entries whose `updatedAt` did not change while the push was in flight.
@@ -402,10 +397,10 @@ seconds after a local change, and on "Sync now":
 4. Store the new cursor and "last synced" time.
 
 First sign-in on a device (or as a different `sub`) marks every local entity pending, so existing
-rounds upload (FR-SYNC-01). Signing out while keeping data keeps the outbox and sync state, so
-unsent edits and deletes upload when the same golfer signs back in. Removing data first tries a last
-sync and refuses while changes are still pending (FR-ACCT-03). Deleting the account clears the
-outbox, so rounds kept on the device are not uploaded again on the next sign-in (FR-ACCT-04). The
+rounds upload (FR-SYNC-01). Signing out first tries a last sync. If the outbox is then empty the
+device is cleared; otherwise rounds, outbox and sync state stay, so unsent edits and deletes upload
+when the same golfer signs back in (FR-ACCT-03). Deleting the account clears the outbox and then
+the device (FR-ACCT-04). The UI never shows sync state except an expired sign-in (FR-SYNC-05). The
 access token switches to a new account only after the outbox has been re-queued for it.
 
 **Infrastructure.** `infra/cloudformation/api.yml` per environment (table, function, role, log
