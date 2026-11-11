@@ -29,12 +29,16 @@ export const clearScanNotice = (): void => {
 export async function processScans(
   db: GolfDb,
   scanCard: (scan: CardScanRequest) => Promise<CardScanResult>,
+  /** False once the golfer who queued the photos has signed out. */
+  stillSignedIn: () => boolean = () => true,
 ): Promise<number> {
   let read = 0;
   const queued = (await db.scans.toArray()).sort((a, b) => a.createdAt.localeCompare(b.createdAt));
   for (const scan of queued) {
     try {
       const result = await scanCard({ mediaType: scan.mediaType, image: scan.image });
+      // A read that finishes after sign-out must not leave that golfer's card on the device.
+      if (!stillSignedIn()) return read;
       saveInProgress(applyScan(loadInProgress() ?? emptyRound(today()), result).round);
       read++;
     } catch (err) {

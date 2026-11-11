@@ -40,6 +40,19 @@ describe('scan queue', () => {
     expect(loadInProgress()?.drafts[0]).toMatchObject({ score: '3', putts: '2' });
   });
 
+  it('discards a read that finishes after the golfer signed out', async () => {
+    const db = new GolfDb(`test-${crypto.randomUUID()}`);
+    await enqueueScan(db, photo);
+    expect(
+      await processScans(
+        db,
+        () => Promise.resolve(result),
+        () => false,
+      ),
+    ).toBe(0);
+    expect(loadInProgress()).toBeNull();
+  });
+
   it('drops a photo the reader rejects and leaves a notice', async () => {
     const db = new GolfDb(`test-${crypto.randomUUID()}`);
     await enqueueScan(db, photo);

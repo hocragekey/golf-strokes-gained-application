@@ -195,11 +195,16 @@ export function AccountProvider({
   // Queued scorecard photos are read once signed in with signal (FR-CARD-06).
   useEffect(() => {
     if (!profile || !cardScanEnabled()) return;
+    const sub = profile.sub;
     let running = false;
     const run = () => {
       if (running || !navigator.onLine) return;
       running = true;
-      void processScans(db, (scan) => api.scanCard(scan))
+      void processScans(
+        db,
+        (scan) => api.scanCard(scan),
+        () => profileRef.current?.sub === sub,
+      )
         .catch(() => undefined)
         .finally(() => {
           running = false;
