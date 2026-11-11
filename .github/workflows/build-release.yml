@@ -4,7 +4,6 @@ name: Build release
 # environment and then promoted to prod, so prod never runs an untested build.
 on:
   workflow_call:
-    inputs:
     outputs:
       artifact:
         description: Name of the uploaded build artifact
