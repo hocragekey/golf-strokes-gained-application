@@ -30,9 +30,15 @@ function parse(raw: string | null): RoundInProgress | null {
 
 export const loadInProgress = (): RoundInProgress | null => parse(localStorage.getItem(KEY));
 
-export function saveInProgress(round: RoundInProgress): void {
+/** `quiet` is for the entry form's own saves, so only outside changes notify listeners. */
+export function saveInProgress(round: RoundInProgress, { quiet = false } = {}): void {
   localStorage.setItem(KEY, JSON.stringify(round));
-  window.dispatchEvent(new Event(CHANGE_EVENT));
+  if (!quiet) window.dispatchEvent(new Event(CHANGE_EVENT));
+}
+
+/** Calls `onChange` when something other than the entry form changes the round in progress. */
+export function onInProgressChange(onChange: () => void): () => void {
+  return subscribe(onChange);
 }
 
 export function clearInProgress(): void {

@@ -27,6 +27,7 @@ import {
 import {
   clearInProgress,
   loadInProgress,
+  onInProgressChange,
   saveInProgress,
   type RoundInProgress,
 } from '../data/inProgress';
@@ -304,18 +305,38 @@ function Scorecard({ existing }: { existing?: RoundDetail }) {
     // Once a round is on the device, later edits to its details are saved too.
     const untouched = pos.step === 'details' && drafts.every(isBlank) && !loadInProgress();
     if (existing || untouched) return;
-    saveInProgress({
-      courseName,
-      tees,
-      playedOn,
-      notes,
-      holeCount,
-      layout,
-      drafts,
-      hole: pos.step === 'details' ? undefined : pos.hole,
-      check: checkHoles,
-    });
+    saveInProgress(
+      {
+        courseName,
+        tees,
+        playedOn,
+        notes,
+        holeCount,
+        layout,
+        drafts,
+        hole: pos.step === 'details' ? undefined : pos.hole,
+        check: checkHoles,
+      },
+      { quiet: true },
+    );
   }, [existing, courseName, tees, playedOn, notes, holeCount, layout, drafts, pos, checkHoles]);
+
+  // A queued photo read in the background lands in storage; pick it up instead of overwriting it.
+  useEffect(() => {
+    if (existing) return;
+    return onInProgressChange(() => {
+      const round = loadInProgress();
+      if (!round) return;
+      setCourseName(round.courseName);
+      setTees(round.tees);
+      setHoleCount(round.holeCount);
+      setLayout(round.layout);
+      setDrafts(round.drafts);
+      setCheckHoles(round.check ?? []);
+      setPhotoNote('Filled from your photo. Check the highlighted holes.');
+      setPos(resumePosition(round));
+    });
+  }, [existing]);
 
   // Keep the screen on while entering holes on the course, where supported.
   useEffect(() => {
