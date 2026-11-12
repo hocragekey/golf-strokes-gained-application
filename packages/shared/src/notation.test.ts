@@ -12,6 +12,7 @@ describe('parseHoleNotation', () => {
     ['4 2 s10 / 5', 3, 195],
     ['5 X 2 150 / 18', 4, 395],
     ['6 L 3 95 / 40', 5, 545],
+    ['6 L 3 280 / 95 / 40', 5, 545],
     ['3 S 0 190 / r25', 4, 425],
   ])('parses the card-guide example "%s" into a valid hole', (line, par, yardage) => {
     const result = parseHoleNotation(line, par);
@@ -27,6 +28,7 @@ describe('parseHoleNotation', () => {
       fields: {
         score: 4,
         teeResult: 'right',
+        driveYardsLeft: null,
         approachYards: 175,
         approachLie: 'rough',
         gir: false,
@@ -62,6 +64,32 @@ describe('parseHoleNotation', () => {
   it('reads f as a fairway approach after a missed drive', () => {
     const result = parseHoleNotation('4 L 2 150f / 20', 4);
     expect(result.ok && result.fields.approachLie).toBe('fairway');
+  });
+
+  it('reads yards left after the drive on a par 5', () => {
+    const result = parseHoleNotation('5 F 2 250 / 110 / 25', 5);
+    expect(result.ok && result.fields).toMatchObject({
+      driveYardsLeft: 250,
+      approachYards: 110,
+      firstPuttFeet: 25,
+    });
+  });
+
+  it('counts a lay-up on a par 4 when a drive distance is given', () => {
+    const result = parseHoleNotation('5 F 1 250 / 100 / f10 / 4', 4);
+    expect(result.ok && result.fields.shortGameShots).toBe(1);
+  });
+
+  it('turns a double cross into a re-tee with one penalty stroke', () => {
+    const result = parseHoleNotation('6 XX 1 150 / f10 / 12', 4);
+    expect(result.ok && result.fields).toMatchObject({
+      teeResult: 'ob',
+      penalties: 1,
+      shortGameShots: 1,
+    });
+    if (!result.ok) return;
+    const entry = holeEntrySchema.parse({ holeNumber: 1, ...result.fields });
+    expect(holeEntryIssues({ number: 1, par: 4, yardage: 400 }, entry)).toEqual([]);
   });
 
   it('turns a penalty drive into one penalty stroke', () => {
