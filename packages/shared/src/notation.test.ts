@@ -75,6 +75,11 @@ describe('parseHoleNotation', () => {
     });
   });
 
+  it('counts a lay-up on a par 4 when a drive distance is given', () => {
+    const result = parseHoleNotation('5 F 1 250 / 100 / f10 / 4', 4);
+    expect(result.ok && result.fields.shortGameShots).toBe(1);
+  });
+
   it('turns a double cross into a re-tee with one penalty stroke', () => {
     const result = parseHoleNotation('6 XX 1 150 / f10 / 12', 4);
     expect(result.ok && result.fields).toMatchObject({

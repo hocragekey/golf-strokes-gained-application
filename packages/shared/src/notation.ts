@@ -107,8 +107,12 @@ export function parseCardMarks(marks: CardMarks, par: number): NotationResult {
   if (extra !== undefined) return unknown(extra);
 
   const penalties = teeResult === 'penalty' || teeResult === 'ob' ? 1 : 0;
-  const retee = teeResult === 'ob' ? 1 : 0;
-  const shortGameShots = chip ? Math.max(1, score - putts - penalties - retee - (par - 2)) : 0;
+  // Shots up to and including the approach: tee shot(s), any lay-ups, the approach. A separate
+  // drive distance means at least one lay-up; par 5s assume one.
+  const teeShots = teeResult === 'ob' ? 2 : 1;
+  const layUps = Math.max(driveYardsLeft === null ? 0 : 1, par - 4);
+  const toApproach = isPar3 ? 1 : teeShots + layUps + 1;
+  const shortGameShots = chip ? Math.max(1, score - putts - penalties - toApproach) : 0;
   return {
     ok: true,
     fields: {
