@@ -68,7 +68,8 @@ export function holeStrokesGained(
   const teeShots = isPar3 ? 0 : Math.min(before, entry.teeResult === 'ob' ? 2 : 1);
   const layUps = before - teeShots;
   const afterDrive: Position | null =
-    !isPar3 && layUps > 0 && entry.driveYardsLeft !== null
+    // Rounds saved before the field existed have no value at all, not null.
+    !isPar3 && layUps > 0 && typeof entry.driveYardsLeft === 'number'
       ? { distance: entry.driveYardsLeft, lie: driveLie(entry.teeResult) }
       : null;
   const teePenalty =

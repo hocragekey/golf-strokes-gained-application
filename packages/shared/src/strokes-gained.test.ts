@@ -83,6 +83,19 @@ describe('holeStrokesGained', () => {
     expect(sg.approach).toBeCloseTo(E(150, 'fairway') - E(20, 'green') - 1, 1);
   });
 
+  it('handles rounds stored before the drive position existed', () => {
+    const { driveYardsLeft: _unused, ...old } = entry({
+      holeNumber: 3,
+      score: 5,
+      teeResult: 'fairway',
+      approachYards: 100,
+      firstPuttFeet: 10,
+    });
+    const sg = holeStrokesGained(par5, old as HoleEntry);
+    expect(Number.isFinite(sg.offTheTee)).toBe(true);
+    expect(sg.offTheTee).toBeCloseTo(E(520, 'tee') - E(100, 'fairway') - 2, 1);
+  });
+
   it('still charges lay-ups to off-the-tee for rounds without a drive position', () => {
     const sg = holeStrokesGained(
       par5,
