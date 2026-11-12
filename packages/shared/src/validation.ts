@@ -23,6 +23,15 @@ export function holeEntryIssues(hole: CourseHole, entry: HoleEntry): EntryIssue[
     add('teeResult', 'Leave tee result blank on par 3s (the tee shot is the approach)');
   }
   if (!isPar3 && entry.teeResult === null) add('teeResult', 'Tee result is required');
+  if (isPar3 && entry.driveYardsLeft !== null) {
+    add('driveYardsLeft', 'Leave the drive distance blank on par 3s');
+  }
+  if (entry.driveYardsLeft !== null && entry.driveYardsLeft > hole.yardage + 50) {
+    add('driveYardsLeft', 'Drive distance left is longer than the hole');
+  }
+  if (entry.teeResult === 'ob' && entry.penalties < 1) {
+    add('penalties', 'A re-tee adds at least one penalty stroke');
+  }
   if (!isPar3 && entry.approachYards === null) {
     add('approachYards', 'Approach distance is required');
   }
@@ -60,7 +69,7 @@ export function holeEntryIssues(hole: CourseHole, entry: HoleEntry): EntryIssue[
   }
 
   const before = strokesBeforeApproach(entry);
-  const minimum = isPar3 ? 0 : 1;
+  const minimum = isPar3 ? 0 : entry.teeResult === 'ob' ? 2 : 1;
   if (before < minimum) {
     add(
       'score',

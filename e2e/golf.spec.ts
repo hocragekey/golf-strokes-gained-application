@@ -6,6 +6,8 @@ async function answerHoleOne(page: Page) {
   await tap('Next');
   await tap('5 Bogey');
   await tap('Right');
+  await page.getByLabel('Yards left').fill('165');
+  await tap('Next');
   await page.getByLabel('Approach yards').fill('165');
   await tap('Rough');
   await tap('Next');

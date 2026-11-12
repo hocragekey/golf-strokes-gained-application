@@ -42,7 +42,8 @@ const LABELS: Record<string, string> = {
   right: 'Right',
   short: 'Short',
   long: 'Long',
-  penalty: 'Penalty / OB',
+  penalty: 'Penalty: drop',
+  ob: 'Out of bounds: re-tee',
   rough: 'Rough',
   sand: 'Bunker',
   recovery: 'Trees / recovery',
@@ -65,7 +66,17 @@ const today = (): string => {
   return `${String(d.getFullYear())}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 };
 
-type Step = 'layout' | 'score' | 'tee' | 'approach' | 'short' | 'putts' | 'penalties' | 'review';
+type Step =
+  | 'layout'
+  | 'score'
+  | 'tee'
+  | 'drive'
+  | 'approach'
+  | 'teeShot'
+  | 'short'
+  | 'putts'
+  | 'penalties'
+  | 'review';
 
 /**
  * The questions asked for a hole, in the order they are marked on the card; par 3s skip the drive
@@ -73,14 +84,15 @@ type Step = 'layout' | 'score' | 'tee' | 'approach' | 'short' | 'putts' | 'penal
  */
 const stepsFor = (par: number): Step[] =>
   par === 3
-    ? ['layout', 'score', 'short', 'putts', 'penalties', 'review']
-    : ['layout', 'score', 'tee', 'approach', 'short', 'putts', 'penalties', 'review'];
+    ? ['layout', 'score', 'teeShot', 'short', 'putts', 'penalties', 'review']
+    : ['layout', 'score', 'tee', 'drive', 'approach', 'short', 'putts', 'penalties', 'review'];
 
 const FIELD_STEP: Record<string, Step> = {
   par: 'layout',
   yardage: 'layout',
   score: 'score',
   teeResult: 'tee',
+  driveYardsLeft: 'drive',
   approachYards: 'approach',
   approachLie: 'approach',
   gir: 'short',
@@ -227,6 +239,7 @@ function holeLine(d: HoleDraft, par: number): string {
     right: 'R',
     short: 'S',
     penalty: 'X',
+    ob: 'XX',
   };
   const lie: Record<string, string> = { rough: 'r', sand: 's', recovery: 't', fairway: 'f' };
   const numbers: string[] = [];
@@ -235,6 +248,9 @@ function holeLine(d: HoleDraft, par: number): string {
     const rough = d.teeResult === 'left' || d.teeResult === 'right';
     const assumed = rough ? 'rough' : 'fairway';
     const approachLie = d.approachLie === assumed ? '' : (lie[d.approachLie] ?? '');
+    if (d.driveYardsLeft !== '' && d.driveYardsLeft !== d.approachYards) {
+      numbers.push(d.driveYardsLeft);
+    }
     numbers.push(`${d.approachYards || '?'}${approachLie}`);
   }
   if (Number(d.shortGameShots) > 0) {
@@ -660,7 +676,10 @@ function Scorecard({ existing }: { existing?: RoundDetail }) {
             onPick={(v) => {
               update({
                 teeResult: v,
-                penalties: v === 'penalty' && draft.penalties === '0' ? '1' : draft.penalties,
+                penalties:
+                  (v === 'penalty' || v === 'ob') && draft.penalties === '0'
+                    ? '1'
+                    : draft.penalties,
                 ...(draft.approachYards === ''
                   ? { approachLie: v === 'left' || v === 'right' ? 'rough' : 'fairway' }
                   : {}),
@@ -671,11 +690,76 @@ function Scorecard({ existing }: { existing?: RoundDetail }) {
         </Question>
       );
       break;
+    case 'drive':
+      body = (
+        <Question
+          title="How far did you have left after your drive?"
+          help="Yards to the pin from where your drive finished. After a re-tee, use the re-teed drive."
+        >
+          <NumberField
+            name="Yards left"
+            suffix="yds to the pin"
+            max={700}
+            autoFocus
+            value={draft.driveYardsLeft}
+            onChange={(v) => {
+              update({ driveYardsLeft: v });
+            }}
+          />
+          <div className="actions">
+            <button
+              type="button"
+              className="primary big"
+              disabled={draft.driveYardsLeft === ''}
+              onClick={() => {
+                // On a par 4 the next shot is usually the approach, so start from the same number.
+                if (par === 4 && draft.approachYards === '') {
+                  update({ approachYards: draft.driveYardsLeft });
+                }
+                next();
+              }}
+            >
+              Next
+            </button>
+          </div>
+        </Question>
+      );
+      break;
+    case 'teeShot':
+      body = (
+        <Question title="Where did your tee shot finish?">
+          <Choices
+            options={['green', ...MISS_DIRECTIONS]}
+            selected={
+              draft.missDirection ||
+              (draft.score !== '' && draft.shortGameShots === '0' && draft.putts !== ''
+                ? 'green'
+                : null)
+            }
+            render={(v) => (v === 'green' ? 'On the green' : `Missed ${v}`)}
+            onPick={(v) => {
+              if (v === 'green') {
+                update({
+                  missDirection: '',
+                  shortGameShots: '0',
+                  shortGameYards: '',
+                  shortGameLie: '',
+                });
+                goTo('putts');
+              } else {
+                update({ missDirection: v });
+                next();
+              }
+            }}
+          />
+        </Question>
+      );
+      break;
     case 'approach':
       body = (
         <Question
           title="How far was your shot into the green?"
-          help="Yards to the pin, and where you hit it from."
+          help="Yards to the pin for the shot onto (or at) the green, and where you hit it from."
         >
           <NumberField
             name="Approach yards"
@@ -717,16 +801,18 @@ function Scorecard({ existing }: { existing?: RoundDetail }) {
           title="Did you chip, pitch or play from a bunker?"
           help="Shots from within about 50 yards that didn't start on the green."
         >
-          <fieldset className="field">
-            <legend>Missed the green? (optional, pick before answering)</legend>
-            <Choices
-              options={MISS_DIRECTIONS}
-              selected={draft.missDirection || null}
-              onPick={(v) => {
-                update({ missDirection: draft.missDirection === v ? '' : v });
-              }}
-            />
-          </fieldset>
+          {par !== 3 && (
+            <fieldset className="field">
+              <legend>Missed the green? (optional, pick before answering)</legend>
+              <Choices
+                options={MISS_DIRECTIONS}
+                selected={draft.missDirection || null}
+                onPick={(v) => {
+                  update({ missDirection: draft.missDirection === v ? '' : v });
+                }}
+              />
+            </fieldset>
+          )}
           <Choices
             options={['0', '1', '2', '3', '4']}
             more={10}
@@ -946,7 +1032,13 @@ function Scorecard({ existing }: { existing?: RoundDetail }) {
                 <span>Card line</span>
                 <input
                   value={cardLine}
-                  placeholder={par === 3 ? '3 2 20' : '4 R 1 175 / s15 / 8'}
+                  placeholder={
+                    par === 3
+                      ? '3 2 20'
+                      : par === 5
+                        ? '5 F 2 250 / 110 / 25'
+                        : '4 R 1 175 / s15 / 8'
+                  }
                   onChange={(e) => {
                     setCardLine(e.target.value);
                   }}
