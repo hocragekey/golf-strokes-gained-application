@@ -129,7 +129,7 @@ export function applyLayout(
  * layout and the chosen tee row where the hole itself left them blank. Null for a blank card.
  */
 export function cardMarks(card: CardReadResult, tee: number | null): CardScanResult | null {
-  if (!card.holes.some((h) => h.score !== null)) return null;
+  if (card.holes.length === 0) return null;
   const row = tee === null ? undefined : card.tees[tee];
   return {
     courseName: card.courseName,

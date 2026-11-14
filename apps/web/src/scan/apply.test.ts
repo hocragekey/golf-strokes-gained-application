@@ -144,6 +144,20 @@ describe('cardMarks', () => {
     expect(cardMarks(card, 0)).toBeNull();
   });
 
+  it('keeps listed holes whose score is unreadable so they are checked', () => {
+    const hole = {
+      number: 1,
+      par: 4,
+      yardage: null,
+      score: null,
+      drive: null,
+      putts: null,
+      stats: '',
+      unsure: true,
+    };
+    expect(cardMarks({ ...card, holes: [hole] }, 0)?.holes).toHaveLength(1);
+  });
+
   it('takes par and the chosen tee yardage from the printed layout', () => {
     const marks = cardMarks(
       {
