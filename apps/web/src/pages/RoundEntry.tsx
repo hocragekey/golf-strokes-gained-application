@@ -570,6 +570,16 @@ function Scorecard({ existing }: { existing?: RoundDetail }) {
             round. We&apos;ll ask for each hole&apos;s par and yardage as you go.
           </p>
           {!existing && cardScanEnabled() && <LayoutImport onRead={applyLayoutPhoto} />}
+          {!existing && cardScanEnabled() && played.length < holeCount && (
+            <PhotoImport
+              onRead={applyPhoto}
+              label={
+                played.length === 0
+                  ? 'Already marked your card? Snap it to fill the round'
+                  : 'Snap your marked card to fill the blank holes'
+              }
+            />
+          )}
           <div className="row">
             <label className="field grow">
               <span>Course (optional)</span>
@@ -1159,16 +1169,6 @@ function Scorecard({ existing }: { existing?: RoundDetail }) {
             </li>
           ))}
         </ol>
-        {!existing && cardScanEnabled() && played.length < holeCount && (
-          <PhotoImport
-            onRead={applyPhoto}
-            label={
-              played.length === 0
-                ? 'Marked your card? Snap it to fill the round'
-                : 'Snap your marked card to fill the blank holes'
-            }
-          />
-        )}
         {played.length > 0 && (
           <button
             type="button"
