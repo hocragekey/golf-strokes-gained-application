@@ -87,7 +87,7 @@ export function CardPhoto({
   return (
     <div className="photo-import">
       <label className={`button secondary${busy ? ' disabled' : ''}`}>
-        {busy ? 'Reading the card…' : 'Snap your scorecard'}
+        {busy ? 'Reading your scorecard…' : 'Take a photo of your scorecard'}
         <input
           type="file"
           accept="image/*"
@@ -102,8 +102,8 @@ export function CardPhoto({
         />
       </label>
       <p className="muted small">
-        Blank card before you tee off: fills par and yards. Marked card after the round: fills your
-        holes too. The photo is deleted once it&apos;s read.
+        Before your round, this fills in par and yards. After your round, it fills in your scores
+        too. The photo is deleted once it&apos;s read.
       </p>
       {error && (
         <p className="field-error" role="alert">

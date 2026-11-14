@@ -24,7 +24,7 @@ const card: CardReadResult = {
 };
 const file = new File(['x'], 'card.jpg', { type: 'image/jpeg' });
 const profile = { sub: '1', email: 'a@b.c', name: 'Al' };
-const snap = () => screen.getByLabelText('Snap your scorecard');
+const snap = () => screen.getByLabelText('Take a photo of your scorecard');
 
 beforeEach(() => {
   account.current = { enabled: true, profile: null };
