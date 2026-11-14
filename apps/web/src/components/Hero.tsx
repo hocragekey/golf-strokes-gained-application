@@ -16,8 +16,8 @@ export function Hero({ compact = false }: { compact?: boolean }) {
         <h1>Improve your golf game</h1>
         {!compact && (
           <p className="hero-lede">
-            Mark a few numbers on your card as you play. Afterwards, answer a few quick questions
-            per hole and see exactly where you&apos;re losing strokes and what to practise.
+            Mark a few numbers on the course&apos;s scorecard as you play, or enter each hole in the
+            app as you finish it. See exactly where you&apos;re losing strokes and what to practise.
           </p>
         )}
         <div className="hero-actions">
@@ -25,7 +25,7 @@ export function Hero({ compact = false }: { compact?: boolean }) {
             Enter a round
           </Link>
           <Link className="button ghost big" to="/guide">
-            Get the card guide &amp; QR code
+            How to mark your card
           </Link>
         </div>
       </div>
@@ -36,15 +36,15 @@ export function Hero({ compact = false }: { compact?: boolean }) {
 const STEPS = [
   {
     title: 'Before you play',
-    text: 'Print the pocket sheet or scan its QR code. It shows what to jot down on any scorecard.',
+    text: 'Open the card guide (or scan a friend’s QR code). Two extra marks per hole on the course’s own card.',
   },
   {
     title: 'On the course',
-    text: 'Mark score, drive, approach distance, chips and putts. About five seconds a hole.',
+    text: 'Mark a drive arrow, putts, and approach / chip / putt numbers. Or enter each hole in the app as you go.',
   },
   {
     title: 'After the round',
-    text: 'We ask one question at a time, hole by hole. No course setup.',
+    text: 'Copy the card hole by hole, or finish the round you started in the app. No course setup.',
   },
 ];
 

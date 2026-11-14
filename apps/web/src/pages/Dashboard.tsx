@@ -4,6 +4,7 @@ import { useStats } from '../data/hooks';
 import { BaselineSelect } from '../components/BaselineSelect';
 import { Hero, HowItWorks } from '../components/Hero';
 import { PracticeFirst } from '../components/Practice';
+import { ResumeRound } from '../components/ResumeRound';
 import { Trend } from '../components/Trend';
 import { SgBars, SgValue } from '../components/Sg';
 import { formatNumber, formatPct } from '../format';
@@ -69,6 +70,7 @@ export function Dashboard() {
   if (s.rounds === 0) {
     return (
       <div className="stack">
+        <ResumeRound />
         <Hero />
         <HowItWorks />
       </div>
@@ -79,6 +81,7 @@ export function Dashboard() {
   const t = s.traditional;
   return (
     <div className="stack">
+      <ResumeRound />
       <Hero compact />
       <div className="card-header">
         <h2>

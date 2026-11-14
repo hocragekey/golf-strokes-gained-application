@@ -4,6 +4,7 @@ import {
   draftFromEntry,
   emptyDraft,
   emptyLayout,
+  isGir,
   layoutFromHole,
   parseLayout,
   validateCard,
@@ -19,14 +20,12 @@ const good4: HoleDraft = {
   score: '4',
   teeResult: 'fairway',
   approachYards: '150',
-  gir: true,
   firstPuttFeet: '20',
   putts: '2',
 };
 const good3: HoleDraft = {
   ...emptyDraft(),
   score: '3',
-  gir: true,
   firstPuttFeet: '15',
   putts: '2',
 };
@@ -43,7 +42,6 @@ describe('validateRow', () => {
       {
         ...good4,
         score: '5',
-        gir: false,
         missDirection: 'short',
         shortGameShots: '1',
         shortGameYards: '15',
@@ -65,6 +63,14 @@ describe('validateRow', () => {
     expect(validateRow({ ...good4, firstPuttFeet: '' }, par4).errors).toHaveProperty(
       'firstPuttFeet',
     );
+  });
+
+  it('works out green in regulation from score and putts', () => {
+    expect(isGir(good4, 4)).toBe(true);
+    expect(isGir({ ...good4, score: '5' }, 4)).toBe(false);
+    expect(isGir({ ...good4, score: '3', putts: '0', firstPuttFeet: '' }, 4)).toBe(true);
+    expect(isGir({ ...good4, shortGameShots: '1' }, 4)).toBe(false);
+    expect(validateRow(good4, par4).entry).toMatchObject({ gir: true });
   });
 
   it('round-trips through draftFromEntry', () => {

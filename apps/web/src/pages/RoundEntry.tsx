@@ -7,12 +7,13 @@ import {
   TEE_RESULTS,
   type RoundDetail,
 } from '@golf-sg/shared';
-import { useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import { useRound, useSaveRound } from '../data/hooks';
 import {
   draftFromEntry,
   emptyDraft,
+  isGir,
   emptyLayout,
   isBlank,
   layoutFromHole,
@@ -22,6 +23,12 @@ import {
   type HoleDraft,
   type LayoutDraft,
 } from '../components/scorecard';
+import {
+  clearInProgress,
+  loadInProgress,
+  saveInProgress,
+  type RoundInProgress,
+} from '../data/inProgress';
 import { formatToPar } from '../format';
 
 const LABELS: Record<string, string> = {
@@ -53,14 +60,16 @@ const today = (): string => {
   return `${String(d.getFullYear())}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 };
 
-type Step =
-  'layout' | 'score' | 'tee' | 'approach' | 'green' | 'short' | 'putts' | 'penalties' | 'review';
+type Step = 'layout' | 'score' | 'tee' | 'approach' | 'short' | 'putts' | 'penalties' | 'review';
 
-/** The questions asked for a hole, in order; par 3s skip the drive and approach distance. */
+/**
+ * The questions asked for a hole, in the order they are marked on the card; par 3s skip the drive
+ * and approach distance. Green in regulation is worked out from the score and putts.
+ */
 const stepsFor = (par: number): Step[] =>
   par === 3
-    ? ['layout', 'score', 'green', 'short', 'putts', 'penalties', 'review']
-    : ['layout', 'score', 'tee', 'approach', 'green', 'short', 'putts', 'penalties', 'review'];
+    ? ['layout', 'score', 'short', 'putts', 'penalties', 'review']
+    : ['layout', 'score', 'tee', 'approach', 'short', 'putts', 'penalties', 'review'];
 
 const FIELD_STEP: Record<string, Step> = {
   par: 'layout',
@@ -69,8 +78,8 @@ const FIELD_STEP: Record<string, Step> = {
   teeResult: 'tee',
   approachYards: 'approach',
   approachLie: 'approach',
-  gir: 'green',
-  missDirection: 'green',
+  gir: 'short',
+  missDirection: 'short',
   shortGameShots: 'short',
   shortGameYards: 'short',
   shortGameLie: 'short',
@@ -205,27 +214,30 @@ function Question({
   );
 }
 
-/** One-line summary of a hole in card notation, e.g. "5 R 165r Sh 1@15s 1@4". */
+/** A hole as typed on one line: score, drive (par 4/5), putts, then the spare-row numbers. */
 function holeLine(d: HoleDraft, par: number): string {
-  const lie: Record<string, string> = { rough: 'r', sand: 's', recovery: 't', fringe: 'f' };
-  const tee: Record<string, string> = {
+  const drive: Record<string, string> = {
     fairway: 'F',
     left: 'L',
     right: 'R',
     short: 'S',
-    penalty: 'P',
+    penalty: 'X',
   };
-  const miss: Record<string, string> = { left: 'L', right: 'R', long: 'Lg', short: 'Sh' };
-  const parts = [d.score];
-  if (par !== 3)
-    parts.push(tee[d.teeResult] ?? '?', `${d.approachYards || '?'}${lie[d.approachLie] ?? ''}`);
-  parts.push(d.gir ? '✓' : (miss[d.missDirection] ?? '?'));
-  if (Number(d.shortGameShots) > 0) {
-    parts.push(`${d.shortGameShots}@${d.shortGameYards || '?'}${lie[d.shortGameLie] ?? ''}`);
+  const lie: Record<string, string> = { rough: 'r', sand: 's', recovery: 't', fairway: 'f' };
+  const numbers: string[] = [];
+  if (par !== 3) {
+    // The parser assumes rough after a drive missed left or right, fairway otherwise.
+    const rough = d.teeResult === 'left' || d.teeResult === 'right';
+    const assumed = rough ? 'rough' : 'fairway';
+    const approachLie = d.approachLie === assumed ? '' : (lie[d.approachLie] ?? '');
+    numbers.push(`${d.approachYards || '?'}${approachLie}`);
   }
-  parts.push(Number(d.putts) > 0 ? `${d.putts}@${d.firstPuttFeet || '?'}` : d.putts || '?');
-  if (Number(d.penalties) > 0) parts.push(`+${d.penalties}`);
-  return parts.join(' ');
+  if (Number(d.shortGameShots) > 0) {
+    numbers.push(`${lie[d.shortGameLie || 'fairway'] ?? 'f'}${d.shortGameYards || '?'}`);
+  }
+  if (Number(d.putts) > 0) numbers.push(d.firstPuttFeet || '?');
+  const marks = [d.score, ...(par !== 3 ? [drive[d.teeResult] ?? '?'] : []), d.putts || '?'];
+  return [...marks, numbers.join(' / ')].filter(Boolean).join(' ');
 }
 
 interface Position {
@@ -233,31 +245,87 @@ interface Position {
   step: Step | 'details';
 }
 
+/** Back to the hole the golfer was on if it isn't finished, otherwise the next blank hole. */
+function resumePosition(round: RoundInProgress): Position {
+  const { drafts, holeCount, hole: at } = round;
+  if (at !== undefined) {
+    const draft = drafts[at] ?? emptyDraft();
+    if (isBlank(draft)) return { hole: at, step: 'layout' };
+    const hole = parseLayout(round.layout[at] ?? emptyLayout(), at + 1).hole;
+    if (!hole || !validateRow(draft, hole).entry) return { hole: at, step: 'review' };
+  }
+  const next = drafts.slice(0, holeCount).findIndex(isBlank);
+  return next < 0 ? { hole: holeCount - 1, step: 'review' } : { hole: next, step: 'layout' };
+}
+
 function Scorecard({ existing }: { existing?: RoundDetail }) {
   const navigate = useNavigate();
   const save = useSaveRound(existing?.round.id);
   const r = existing?.round;
-  const [courseName, setCourseName] = useState(r?.courseName ?? '');
-  const [tees, setTees] = useState(r?.tees ?? '');
-  const [playedOn, setPlayedOn] = useState(r?.playedOn ?? today());
-  const [notes, setNotes] = useState(r?.notes ?? '');
-  const [holeCount, setHoleCount] = useState(r && r.layout.length <= 9 ? 9 : 18);
+  // A new round picks up where the golfer left off (phone locked, app closed, no signal).
+  const [resumed] = useState(() => (existing ? null : loadInProgress()));
+  const [courseName, setCourseName] = useState(r?.courseName ?? resumed?.courseName ?? '');
+  const [tees, setTees] = useState(r?.tees ?? resumed?.tees ?? '');
+  const [playedOn, setPlayedOn] = useState(r?.playedOn ?? resumed?.playedOn ?? today());
+  const [notes, setNotes] = useState(r?.notes ?? resumed?.notes ?? '');
+  const [holeCount, setHoleCount] = useState(
+    resumed?.holeCount ?? (r && r.layout.length <= 9 ? 9 : 18),
+  );
   const [layout, setLayout] = useState<LayoutDraft[]>(() =>
     Array.from({ length: 18 }, (_, i) => {
       const hole = r?.layout[i];
-      return hole ? layoutFromHole(hole) : emptyLayout();
+      return hole ? layoutFromHole(hole) : (resumed?.layout[i] ?? emptyLayout());
     }),
   );
   const [drafts, setDrafts] = useState<HoleDraft[]>(() =>
     Array.from({ length: 18 }, (_, i) => {
       const entry = r?.holes[i];
-      return entry ? draftFromEntry(entry) : emptyDraft();
+      return entry ? draftFromEntry(entry) : { ...emptyDraft(), ...resumed?.drafts[i] };
     }),
   );
-  const [pos, setPos] = useState<Position>({ hole: 0, step: 'details' });
+  const [pos, setPos] = useState<Position>(() =>
+    resumed ? resumePosition(resumed) : { hole: 0, step: 'details' },
+  );
   const [cardLine, setCardLine] = useState('');
   const [lineError, setLineError] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
+
+  useEffect(() => {
+    // Saved from the first hole on, so nothing typed is lost if the phone closes the app.
+    // Once a round is on the device, later edits to its details are saved too.
+    const untouched = pos.step === 'details' && drafts.every(isBlank) && !loadInProgress();
+    if (existing || untouched) return;
+    saveInProgress({
+      courseName,
+      tees,
+      playedOn,
+      notes,
+      holeCount,
+      layout,
+      drafts,
+      hole: pos.step === 'details' ? undefined : pos.hole,
+    });
+  }, [existing, courseName, tees, playedOn, notes, holeCount, layout, drafts, pos]);
+
+  // Keep the screen on while entering holes on the course, where supported.
+  useEffect(() => {
+    let lock: WakeLockSentinel | undefined;
+    const request = () => {
+      if (document.visibilityState !== 'visible' || !('wakeLock' in navigator)) return;
+      navigator.wakeLock.request('screen').then(
+        (l) => {
+          lock = l;
+        },
+        () => undefined,
+      );
+    };
+    request();
+    document.addEventListener('visibilitychange', request);
+    return () => {
+      document.removeEventListener('visibilitychange', request);
+      void lock?.release();
+    };
+  }, []);
 
   const holeLayout = (i: number) => parseLayout(layout[i] ?? emptyLayout(), i + 1);
   const draft = drafts[pos.hole] ?? emptyDraft();
@@ -332,6 +400,7 @@ function Scorecard({ existing }: { existing?: RoundDetail }) {
         layout: holes.slice(0, result.entries.length).filter((h) => h !== undefined),
         holes: result.entries,
       });
+      if (!existing) clearInProgress();
       void navigate(`/rounds/${saved.round.id}`);
     } catch (err) {
       setFormError(err instanceof Error ? err.message : 'Save failed');
@@ -367,7 +436,8 @@ function Scorecard({ existing }: { existing?: RoundDetail }) {
         <div className="question">
           <h3>{existing ? 'Round details' : 'New round'}</h3>
           <p className="muted small">
-            No setup needed: we&apos;ll ask for each hole&apos;s par and yardage as you go.
+            Start on the first tee and enter each hole as you finish it, or copy your card after the
+            round. We&apos;ll ask for each hole&apos;s par and yardage as you go.
           </p>
           <div className="row">
             <label className="field grow">
@@ -429,8 +499,27 @@ function Scorecard({ existing }: { existing?: RoundDetail }) {
                 startHole(0);
               }}
             >
-              {existing ? 'Review holes' : 'Start with hole 1'}
+              {existing
+                ? 'Review holes'
+                : played.length > 0
+                  ? 'Back to the round'
+                  : 'Start with hole 1'}
             </button>
+            {!existing && played.length > 0 && (
+              <button
+                type="button"
+                onClick={() => {
+                  clearInProgress();
+                  setDrafts(Array.from({ length: 18 }, emptyDraft));
+                  setLayout(Array.from({ length: 18 }, emptyLayout));
+                  setCourseName('');
+                  setTees('');
+                  setNotes('');
+                }}
+              >
+                Discard this round
+              </button>
+            )}
           </div>
         </div>
       );
@@ -506,6 +595,9 @@ function Scorecard({ existing }: { existing?: RoundDetail }) {
               update({
                 teeResult: v,
                 penalties: v === 'penalty' && draft.penalties === '0' ? '1' : draft.penalties,
+                ...(draft.approachYards === ''
+                  ? { approachLie: v === 'left' || v === 'right' ? 'rough' : 'fairway' }
+                  : {}),
               });
               next();
             }}
@@ -552,33 +644,23 @@ function Scorecard({ existing }: { existing?: RoundDetail }) {
         </Question>
       );
       break;
-    case 'green':
-      body = (
-        <Question
-          title="Did you hit the green in regulation?"
-          help={`On the green in ${String(par - 2)} or fewer. If not, where did you miss?`}
-        >
-          <Choices
-            options={['gir', ...MISS_DIRECTIONS]}
-            selected={draft.gir ? 'gir' : draft.missDirection || null}
-            render={(v) => (v === 'gir' ? 'Yes, on the green' : `Missed ${v}`)}
-            onPick={(v) => {
-              update(
-                v === 'gir' ? { gir: true, missDirection: '' } : { gir: false, missDirection: v },
-              );
-              next();
-            }}
-          />
-        </Question>
-      );
-      break;
     case 'short': {
       const shots = Number(draft.shortGameShots);
       body = (
         <Question
-          title="How many chips, pitches or bunker shots?"
+          title="Did you chip, pitch or play from a bunker?"
           help="Shots from within about 50 yards that didn't start on the green."
         >
+          <fieldset className="field">
+            <legend>Missed the green? (optional, pick before answering)</legend>
+            <Choices
+              options={MISS_DIRECTIONS}
+              selected={draft.missDirection || null}
+              onPick={(v) => {
+                update({ missDirection: draft.missDirection === v ? '' : v });
+              }}
+            />
+          </fieldset>
           <Choices
             options={['0', '1', '2', '3', '4']}
             more={10}
@@ -695,8 +777,9 @@ function Scorecard({ existing }: { existing?: RoundDetail }) {
       body = (
         <Question title={`Hole ${String(n)} summary`}>
           <p className="hole-line">
-            <span className="muted small">Card line</span>
+            <span className="muted small">On your card</span>
             <code>{holeLine(draft, par)}</code>
+            {isGir(draft, par) && <span className="muted small">Green in regulation</span>}
           </p>
           {Object.keys(errors).length > 0 ? (
             <ul className="field-errors" role="alert">
@@ -792,7 +875,7 @@ function Scorecard({ existing }: { existing?: RoundDetail }) {
                 <span>Card line</span>
                 <input
                   value={cardLine}
-                  placeholder={par === 3 ? '3 ✓ 2@25' : '5 R 165r Sh 1@15s 1@4'}
+                  placeholder={par === 3 ? '3 2 20' : '4 R 1 175 / s15 / 8'}
                   onChange={(e) => {
                     setCardLine(e.target.value);
                   }}

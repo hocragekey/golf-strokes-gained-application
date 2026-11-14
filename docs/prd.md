@@ -50,9 +50,10 @@ enough on that card** to compute SG by category, and a tool that turns it into a
 
 ## 4. User journeys
 
-1. **Before the round:** open the card guide (or scan the QR on the pocket sheet), learn the
-   one-line notation, optionally print the pocket sheet.
-2. **On the course:** write one short line per hole on the scorecard or sheet.
+1. **Before the round:** open the card guide (or scan the QR code off a partner's phone) and
+   learn the two-row marks for the course's own scorecard.
+2. **On the course:** mark a drive arrow, putts and `approach / chip / putt` numbers on the card,
+   or enter each hole in the app as it is finished (on-course mode).
 3. **After the round:** tap **Enter a round**. No course setup: optionally name the course, then
    answer one question at a time per hole (par and yardage from the card, score, drive, approach,
    green, short game, putts, penalties), or type the hole's card line as a shortcut. See SG for the
@@ -68,13 +69,14 @@ Priority uses MoSCoW. Status: ✅ implemented · ◐ partial · 🚧 in progress
 
 ### 5.1 Card capture (scorecard-agnostic)
 
-| ID         | Requirement                                                                                                                                                                                                           | Priority | Status |
-| ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- | ------ |
-| FR-CARD-01 | The app defines a **one-line-per-hole notation** in a fixed order (`Score · Drive · Approach · Green · Short game · Putts · Penalties`) that fits in a single scorecard column, spare row, margin, or scrap of paper. | Must     | ✅     |
-| FR-CARD-02 | The card guide explains every field, when it applies (e.g. tee result only on par 4/5), and shows worked examples for a par 3, 4 and 5.                                                                               | Must     | ✅     |
-| FR-CARD-03 | A **printable pocket stat sheet** (18 rows, one column per field, with a notation legend) for courses whose card has no room.                                                                                         | Must     | ✅     |
-| FR-CARD-04 | The pocket sheet carries a **QR code** to the card guide of the environment it was printed from, generated on-device (works offline).                                                                                 | Should   | ✅     |
-| FR-CARD-05 | The notation captures exactly the fields the SG engine needs (FR-ENTRY-02), nothing more.                                                                                                                             | Must     | ✅     |
+| ID         | Requirement                                                                                                                                                                                                                                                                                                                                    | Priority | Status     |
+| ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- | ---------- |
+| FR-CARD-01 | **Two-row marking on the course's own scorecard.** The golfer's normal row holds the score plus two corner marks (drive arrow top-left on par 4/5: ↑ ← → ↓ ✕; putts bottom-right). One spare row holds `approach yards / chip / first-putt feet`, where the chip is a lie letter (r, s, f) plus yards, e.g. `175 / s15 / 8`. Nothing to print. | Must     | ✅         |
+| FR-CARD-02 | The card guide shows a marked-up example front nine, explains every mark and when it applies, and lists what the app works out (GIR, number of chips, approach lie, penalty).                                                                                                                                                                  | Must     | ✅         |
+| FR-CARD-03 | ~~Printable pocket stat sheet.~~ Removed in 1.7 (owner): nobody prints; golfers mark the card they get at the course (FR-CARD-01).                                                                                                                                                                                                             | —        | ❌ Removed |
+| FR-CARD-04 | The card guide shows a **QR code** to itself, generated on-device, so a playing partner can scan it off a phone and open the guide without an account (works offline once the app has loaded).                                                                                                                                                 | Should   | ✅         |
+| FR-CARD-05 | The notation captures exactly the fields the SG engine needs (FR-ENTRY-02), nothing more.                                                                                                                                                                                                                                                      | Must     | ✅         |
+| FR-CARD-06 | Photo of a marked card: the app reads the two rows (and the printed par/yardage) with an AI vision model and opens a hole-by-hole review with uncertain cells highlighted before saving. Photos are queued offline and deleted after reading.                                                                                                  | Should   | 🔜 (P2)    |
 
 ### 5.2 Course data
 
@@ -82,34 +84,37 @@ Rounds never require a course. A round stores the par and yardage of every hole 
 from the physical scorecard during entry. Saved courses were removed in 1.5; pre-filled par and
 yardage will come from a course data integration (FR-COURSE-04).
 
-| ID           | Requirement                                                                                       | Priority | Status     |
-| ------------ | ------------------------------------------------------------------------------------------------- | -------- | ---------- |
-| FR-COURSE-01 | ~~Remember a course from a named round.~~ Removed in 1.5 (owner): replaced by FR-COURSE-04.       | —        | ❌ Removed |
-| FR-COURSE-02 | Rounds never depend on course data: every round keeps its own par and yardage (ADR 0010).         | Must     | ✅         |
-| FR-COURSE-03 | ~~Pre-fill from a saved course.~~ Removed in 1.5 (owner): replaced by FR-COURSE-04.               | —        | ❌ Removed |
-| FR-COURSE-04 | Course data integration (third-party course database) that pre-fills hole count, par and yardage. | Could    | 🔜 (P2)    |
+| ID           | Requirement                                                                                                                                                                                  | Priority | Status     |
+| ------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- | ---------- |
+| FR-COURSE-01 | ~~Remember a course from a named round.~~ Removed in 1.5 (owner): replaced by FR-COURSE-04.                                                                                                  | —        | ❌ Removed |
+| FR-COURSE-02 | Rounds never depend on course data: every round keeps its own par and yardage (ADR 0010).                                                                                                    | Must     | ✅         |
+| FR-COURSE-03 | ~~Pre-fill from a saved course.~~ Removed in 1.5 (owner): replaced by FR-COURSE-04.                                                                                                          | —        | ❌ Removed |
+| FR-COURSE-04 | Course data integration (third-party course database) that pre-fills hole count, par and yardage.                                                                                            | Could    | 🔜 (P2)    |
+| FR-COURSE-05 | Photo of the blank scorecard before tee-off sets up hole count, par, yardage per tee and handicap index; once confirmed it is shared so the next golfer at that course picks it from a list. | Should   | 🔜 (P2)    |
 
 ### 5.3 Round entry
 
-| ID          | Requirement                                                                                                                                                                                                                                                                                                                        | Priority | Status |
-| ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- | ------ |
-| FR-ENTRY-01 | Start a round with no setup: date (today, local time), optional course name and tees, 9 or 18 holes, optional notes. Par (3–6) and yardage (50–800) are entered per hole from the card and stored with the round. 1–18 holes, consecutive from hole 1.                                                                             | Must     | ✅     |
-| FR-ENTRY-02 | Per hole: score, tee result (par 4/5), approach yards and lie (par 4/5), GIR, miss direction, short-game shot count + first distance and lie, putts + first-putt feet, penalties.                                                                                                                                                  | Must     | ✅     |
-| FR-ENTRY-03 | Cross-field validation with field-level messages (e.g. GIR impossible for the score, first-putt distance required when putts > 0, score too low for the shots recorded).                                                                                                                                                           | Must     | ✅     |
-| FR-ENTRY-04 | Edit and delete saved rounds.                                                                                                                                                                                                                                                                                                      | Must     | ✅     |
-| FR-ENTRY-05 | Guided entry that just asks: one question per screen with large tap targets; single-choice answers advance automatically; questions that don't apply are skipped (no drive or approach distance on par 3s). Each hole ends with a summary (card line + issues with a Fix link); any hole can be revisited; running score is shown. | Must     | ✅     |
-| FR-ENTRY-06 | Optional shortcut: type a hole's one-line card notation (e.g. `5 R 165r Sh 1@15s 1@4`) to fill every answer; parse errors say what is missing. Never required.                                                                                                                                                                     | Should   | ✅     |
-| FR-ENTRY-07 | Existing on-device rounds keep working: the database upgrade gives each round a copy of its course's par, yardage, name and tees.                                                                                                                                                                                                  | Must     | ✅     |
+| ID          | Requirement                                                                                                                                                                                                                                                                                                                                                                                                                                                | Priority | Status |
+| ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- | ------ |
+| FR-ENTRY-01 | Start a round with no setup: date (today, local time), optional course name and tees, 9 or 18 holes, optional notes. Par (3–6) and yardage (50–800) are entered per hole from the card and stored with the round. 1–18 holes, consecutive from hole 1.                                                                                                                                                                                                     | Must     | ✅     |
+| FR-ENTRY-02 | Per hole: score, tee result (par 4/5), approach yards and lie (par 4/5), short-game shot count + first distance and lie, optional miss direction, putts + first-putt feet, penalties. Green in regulation is worked out from score and putts (score − putts ≤ par − 2, no short-game shots), never asked.                                                                                                                                                  | Must     | ✅     |
+| FR-ENTRY-03 | Cross-field validation with field-level messages (e.g. GIR impossible for the score, first-putt distance required when putts > 0, score too low for the shots recorded).                                                                                                                                                                                                                                                                                   | Must     | ✅     |
+| FR-ENTRY-04 | Edit and delete saved rounds.                                                                                                                                                                                                                                                                                                                                                                                                                              | Must     | ✅     |
+| FR-ENTRY-05 | Guided entry that just asks, in the order the card is marked: one question per screen with large tap targets; single-choice answers advance automatically; questions that don't apply are skipped (no drive or approach distance on par 3s). A drive missed left or right pre-selects a rough approach lie. Each hole ends with a summary (the hole as typed on one line, GIR, issues with a Fix link); any hole can be revisited; running score is shown. | Must     | ✅     |
+| FR-ENTRY-06 | Optional shortcut: type a hole on one line in card order (score, drive, putts, spare-row numbers, e.g. `5 R 2 165 / s15 / 4`) to fill every answer; parse errors say what is missing. Never required.                                                                                                                                                                                                                                                      | Should   | ✅     |
+| FR-ENTRY-07 | Existing on-device rounds keep working: the database upgrade gives each round a copy of its course's par, yardage, name and tees.                                                                                                                                                                                                                                                                                                                          | Must     | ✅     |
+| FR-ENTRY-08 | **On-course mode:** a new round can be entered hole by hole while playing. It is saved on the device after every answer, survives the phone locking, the app closing and no signal, and resumes at the next hole (Home shows "Resume at hole N"). It can be discarded; it is cleared when the round is saved or the golfer signs out.                                                                                                                      | Must     | ✅     |
+| FR-ENTRY-09 | The screen stays awake during entry where the browser supports it (Screen Wake Lock).                                                                                                                                                                                                                                                                                                                                                                      | Could    | ✅     |
 
 ### 5.3.1 Home and results
 
-| ID         | Requirement                                                                                                                                                                    | Priority | Status |
-| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------- | ------ |
-| FR-HOME-01 | Home leads with a full-bleed golf course photo, the promise ("Improve your golf game") and two actions: **Enter a round** and **Get the card guide & QR code**. Works offline. | Must     | ✅     |
-| FR-HOME-02 | With no rounds yet, home explains the three steps (before, during, after the round).                                                                                           | Must     | ✅     |
-| FR-HOME-03 | Dashboard and round results lead with **Practice this first**: the weakest category, its SG, and one concrete drill. Round results also show the best and toughest hole.       | Must     | ✅     |
-| FR-HOME-04 | Dashboard shows a total-SG trend across the selected rounds.                                                                                                                   | Should   | ✅     |
-| FR-HOME-05 | On phones, navigation is a bottom tab bar (Home, Rounds, New round, Card guide, Sign in/Account).                                                                              | Should   | ✅     |
+| ID         | Requirement                                                                                                                                                              | Priority | Status |
+| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------- | ------ |
+| FR-HOME-01 | Home leads with a full-bleed golf course photo, the promise ("Improve your golf game") and two actions: **Enter a round** and **How to mark your card**. Works offline.  | Must     | ✅     |
+| FR-HOME-02 | With no rounds yet, home explains the three steps (before, during, after the round).                                                                                     | Must     | ✅     |
+| FR-HOME-03 | Dashboard and round results lead with **Practice this first**: the weakest category, its SG, and one concrete drill. Round results also show the best and toughest hole. | Must     | ✅     |
+| FR-HOME-04 | Dashboard shows a total-SG trend across the selected rounds.                                                                                                             | Should   | ✅     |
+| FR-HOME-05 | On phones, navigation is a bottom tab bar (Home, Rounds, New round, Card guide, Sign in/Account).                                                                        | Should   | ✅     |
 
 ### 5.4 Strokes gained and insights
 
@@ -214,6 +219,8 @@ Everything marked ✅ above. Free, no account. Hosted on AWS (dev + prod) for a 
   function stores each golfer's data in DynamoDB under their Google account ID (ADR 0011).
 - Handicap-matched baselines (FR-SG-08), CSV export (FR-DATA-05),
   drill library (FR-SG-09), course data integration (FR-COURSE-04).
+- Scorecard photos (FR-CARD-06, FR-COURSE-05): an AI vision model behind the authenticated API
+  reads the marked card and the blank card's par and yardage; shared course list.
 - Opt-in analytics; status page; error reporting.
 
 ### Phase 3: Native apps and on-course capture
@@ -222,7 +229,7 @@ Everything marked ✅ above. Free, no account. Hosted on AWS (dev + prod) for a 
   contract; offline-first by design.
 - On-course entry with GPS distances to the green, optional shot-by-shot mode, Apple Watch / Wear OS
   quick-entry.
-- Photo capture of the scorecard with on-device OCR of the notation (stretch).
+- GPS distances to fill in approach yards during on-course entry.
 
 ### Phase 4: Coaching and community
 
@@ -282,3 +289,4 @@ Principles:
 | 1.4     | Owner request: accounts to save strokes gained and track progress. Added §5.7 (FR-ACCT-01..06, FR-SYNC-01..06). Owner chose Google sign-in (Q3 resolved). Phase 2 roadmap updated to API Gateway + Lambda + DynamoDB (ADR 0011).                                                                                                                                                                                                       |
 | 1.5     | Owner request: saved courses and backup import are not needed yet. Removed FR-COURSE-01/03 and FR-DATA-03; FR-DATA-02 is now "Download my data" (export only). Course pre-fill will come from a course data integration (FR-COURSE-04).                                                                                                                                                                                                |
 | 1.6     | Owner UX review: storage and connectivity are implementation details, not features. Removed FR-DATA-02 (data download) and FR-PWA-03 (offline badge); FR-SYNC-05 is now invisible sync; FR-ACCT-02..04 simplified (sign-out clears uploaded rounds, keeps unsent ones; deleting account data also clears the device).                                                                                                                  |
+| 1.7     | Owner review: golfers mark the course's own card, not a printout. FR-CARD-01..04 rewritten for two-row marking (pocket sheet removed, QR code kept on the guide). GIR is derived, not asked (FR-ENTRY-02, 05); new card-line format (FR-ENTRY-06); on-course mode (FR-ENTRY-08, 09). Planned scorecard photo reading (FR-CARD-06) and course setup from a photo of the blank card (FR-COURSE-05).                                      |

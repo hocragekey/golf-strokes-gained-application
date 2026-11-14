@@ -36,10 +36,10 @@ code and tests.
 
 | Path                       | Responsibility                                                                                                                                                                                                                                                                                       |
 | -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `packages/shared/src`      | `schemas.ts` (Zod contracts), `baseline.ts`, `strokes-gained.ts`, `validation.ts`, `insights.ts`                                                                                                                                                                                                     |
-| `apps/web/src/data`        | `db.ts` (Dexie schema), `store.ts` (LocalStore), `hooks.ts` (queries), `preferences.ts`                                                                                                                                                                                                              |
+| `packages/shared/src`      | `schemas.ts` (Zod contracts), `baseline.ts`, `strokes-gained.ts`, `validation.ts`, `insights.ts`, `notation.ts` (card marks)                                                                                                                                                                         |
+| `apps/web/src/data`        | `db.ts` (Dexie schema), `store.ts` (LocalStore), `hooks.ts` (queries), `preferences.ts`, `inProgress.ts` (round being entered)                                                                                                                                                                       |
 | `apps/web/src/pages`       | Route components: Dashboard, Rounds, RoundEntry, RoundDetail, CardGuide, Account                                                                                                                                                                                                                     |
-| `apps/web/src/components`  | `Sg` (bars/values), `BaselineSelect`, `QrCode`, scorecard helpers                                                                                                                                                                                                                                    |
+| `apps/web/src/components`  | `Sg` (bars/values), `BaselineSelect`, `QrCode`, `ResumeRound`, scorecard helpers                                                                                                                                                                                                                     |
 | `apps/sync/src`            | Sync API Lambda: handler, DynamoDB repository (section 13.1)                                                                                                                                                                                                                                         |
 | `infra/cloudformation`     | `bootstrap.yml` (OIDC + IAM), `web.yml` (S3 + CloudFront per environment)                                                                                                                                                                                                                            |
 | `scripts/aws-bootstrap.sh` | Deploys the bootstrap stack (reusing an existing OIDC provider), creates the `dev`/`test`/`prod` GitHub environments restricted to `main` with a prod reviewer, and sets all variables. With `DOMAIN` it also deploys `domain.yml` (ACM certificate for the prod and `test.` hostnames). Idempotent. |
@@ -95,12 +95,17 @@ the SG engine never needs a saved course (ADR 0010).
 | `putts`              | 0–10                                                   | 0 = holed from off the green                 |
 | `penalties`          | 0–10                                                   |                                              |
 
-The card notation (FR-CARD-01) maps one-to-one onto these fields:
-`Score`→`score`; `Tee`→`teeResult`; `Approach` yards+lie→`approachYards`/`approachLie`;
-`Green` ✓/miss→`gir`/`missDirection`; `Short game` n@yds+lie→`shortGame*`;
-`Putts` n@ft→`putts`/`firstPuttFeet`; `+n`→`penalties`. `parseHoleNotation(line, par)` in
-`packages/shared/src/notation.ts` implements this mapping for the optional card-line shortcut
-(FR-ENTRY-06) and returns a human-readable error naming the first missing or invalid token.
+The two-row card marks (FR-CARD-01) map onto these fields as follows. From the score box:
+`score`, the drive arrow → `teeResult` (✕ also sets `penalties = 1`) and putts → `putts`.
+From the spare row `approach / chip / first putt`: approach yards → `approachYards`, with
+`approachLie` from an optional `r`/`s`/`t` suffix, otherwise `rough` after a drive missed left or
+right and `fairway` otherwise. The chip (`r15`, `s15`, `f15`) → `shortGameLie`/`shortGameYards`,
+and the final number → `firstPuttFeet`. Derived: `gir = no chip && score - max(putts, 1) <= par - 2`;
+`shortGameShots = max(1, score - putts - penalties - (par - 2))` when a chip is marked, assuming
+the approach was shot `par - 2`. `missDirection` is optional. `parseCardMarks(marks, par)` in
+`packages/shared/src/notation.ts` implements this. `parseHoleNotation(line, par)` parses the same
+marks typed on one line (`5 R 2 165 / s15 / 4`) for the shortcut (FR-ENTRY-06), and will parse the
+cells read from a scorecard photo (FR-CARD-06). Errors name the first missing or invalid mark.
 
 ### Storage
 
@@ -231,26 +236,32 @@ well inside NFR-PERF-01's 100 ms phone budget.
   A different account signing in drops those leftovers (listed in `meta.leftovers`) instead of
   uploading them; rounds saved while signed out are kept and uploaded to whoever signs in.
 
-### 7.4 Card guide and pocket sheet (FR-CARD-01..05)
+### 7.4 Card guide (FR-CARD-01..05)
 
-`CardGuide` renders the notation table, worked examples, and an 18-row pocket sheet that starts on
-a new page when printed. `QrCode` builds the QR matrix on-device with `qrcode` (`QRCode.create`) and
-renders it as inline SVG `<path>` elements, so it needs no network, no `data:` URLs, and no
-`innerHTML`. The encoded URL is `origin + BASE_URL + 'guide'`, so a sheet printed from dev points at
-dev and one printed from prod points at prod.
+`CardGuide` shows `public/card-marking.svg` (a marked-up example front nine with the handwriting
+font subset and embedded, so it renders offline and is precached), tables for the score-box marks
+and spare-row examples, and what the app derives. `QrCode` builds the QR matrix on-device with
+`qrcode` (`QRCode.create`) and renders it as inline SVG `<path>` elements, so it needs no network,
+no `data:` URLs, and no `innerHTML`. The encoded URL is `origin + BASE_URL + 'guide'`; the guide
+needs no account.
 
 ### 7.5 Guided round entry (FR-ENTRY-01, FR-ENTRY-05, FR-ENTRY-06)
 
 `RoundEntry` is a small state machine: a details step, then for each hole the steps from
-`stepsFor(par)`: `layout → score → tee → approach → green → short → putts → penalties → review`,
+`stepsFor(par)`: `layout → score → tee → approach → short → putts → penalties → review`,
 with `tee` and `approach` dropped on par 3s. Single-choice answers (`Choices`, buttons with
 `aria-pressed`) update the draft and advance; steps with a follow-up number (approach yards,
 short-game yards, first putt) show a Next button. A hole whose par and yardage are already known
-(e.g. when editing) starts at `score`. The review step shows the hole as a card line
+(e.g. when editing) starts at `score`. The review step shows the hole as typed on one line (and GIR, from `isGir`)
 and lists `validateRow` issues, each with a Fix link back to the step that owns the field
 (`FIELD_STEP`). The side scorecard (`aria-label="Scorecard"`) shows hole status (todo/done/error),
 jumps to any hole, and finishes the round early. The card-line shortcut runs `parseHoleNotation`
-and jumps straight to the review step. Drafts stay as strings (`HoleDraft`, `LayoutDraft`) and are
+and jumps straight to the review step. Choosing a drive missed left or right pre-selects a rough
+approach lie. On-course mode (FR-ENTRY-08): a new round's drafts are written to `localStorage`
+(`golf-sg.round-in-progress`, `data/inProgress.ts`) on every change once a hole has a score;
+reopening `/rounds/new` restores them at the next blank hole, `ResumeRound` links to it from Home,
+and the entry is removed on save, on Discard and on sign-out. It is per device and never synced.
+The page holds a Screen Wake Lock while visible (FR-ENTRY-09). Drafts stay as strings (`HoleDraft`, `LayoutDraft`) and are
 validated with the same shared schema and rules on save.
 
 ### 7.6 UI
@@ -307,7 +318,7 @@ Region `us-east-1` (CloudFront certificates must live there). Step-by-step: [dep
 | ---------- | ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------- |
 | Domain     | Vitest                   | baselines (interpolation, scratch scaling), SG formulas and the sum invariant, validation rules, insights                               |
 | Data       | Vitest + fake-indexeddb  | LocalStore CRUD, data download, Dexie v1→v2 migration, baseline selection                                                               |
-| Components | Vitest + Testing Library | every page, including baseline switching, card guide, pocket sheet and QR                                                               |
+| Components | Vitest + Testing Library | every page, including baseline switching, card guide and QR, resuming a round in progress                                               |
 | Sync API   | Vitest + DynamoDB Local  | handler auth/validation, push/pull/delete, conditional writes, tombstones, cursor paging, cross-user isolation                          |
 | End-to-end | Playwright               | production build: hero → guided round with no course setup (incl. card line) → SG → practice card; offline reload with data; card guide |
 | Infra      | cfn-lint, checkov        | template validity and security posture (skips justified inline)                                                                         |
@@ -316,7 +327,7 @@ Region `us-east-1` (CloudFront certificates must live there). Step-by-step: [dep
 
 | Requirement             | Implementation                                                                                                          | Verification                                                                           |
 | ----------------------- | ----------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
-| FR-CARD-01..05          | `apps/web/src/pages/CardGuide.tsx`, `components/QrCode.tsx`                                                             | `pages.test.tsx` (card guide), `e2e/golf.spec.ts` (card guide)                         |
+| FR-CARD-01..05          | `apps/web/src/pages/CardGuide.tsx`, `components/QrCode.tsx`, `packages/shared/src/notation.ts`                          | `pages.test.tsx` (card guide), `e2e/golf.spec.ts` (card guide)                         |
 | FR-COURSE-02            | `data/store.ts` (`saveRound`), `shared` round schema (`layout`)                                                         | `store.test.ts`                                                                        |
 | FR-ENTRY-01..05         | `pages/RoundEntry.tsx`, `components/scorecard.ts`, `shared/validation.ts`, `store.saveRound`                            | `validation.test.ts`, `scorecard.test.ts`, `store.test.ts`, `pages.test.tsx`, E2E      |
 | FR-ENTRY-06             | `shared/notation.ts` (`parseHoleNotation`), `pages/RoundEntry.tsx`                                                      | `notation.test.ts`, `pages.test.tsx`, E2E                                              |

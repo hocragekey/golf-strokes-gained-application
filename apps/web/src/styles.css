@@ -470,19 +470,41 @@ button.danger {
   text-align: center;
 }
 
-.table.sheet td {
-  height: 1.6rem;
+.card-diagram {
+  margin-top: 0.75rem;
+  overflow-x: auto;
   border: var(--border-width) solid var(--border);
 }
 
-@media print {
-  .pocket-sheet {
-    break-before: page;
-  }
+.card-diagram img {
+  display: block;
+  width: 100%;
+  min-width: 52rem;
+  height: auto;
+}
 
-  .table.sheet td {
-    border-color: #999;
-  }
+.share-guide .qr {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  text-align: left;
+}
+
+.share-guide figcaption {
+  display: flex;
+  flex-direction: column;
+}
+
+.resume-round {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.resume-round .eyebrow {
+  margin: 0;
 }
 
 /* ---------- Redesign: hero, guided entry, practice ---------- */
