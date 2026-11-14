@@ -6,6 +6,7 @@ import {
   SHORT_GAME_LIES,
   TEE_RESULTS,
   type CardLayoutResult,
+  type CardReadResult,
   type CardScanResult,
   type RoundDetail,
 } from '@golf-sg/shared';
@@ -33,10 +34,9 @@ import {
   type RoundInProgress,
 } from '../data/inProgress';
 import { formatToPar } from '../format';
-import { applyLayout, applyScan } from '../scan/apply';
-import { LayoutImport } from '../scan/LayoutImport';
+import { applyLayout, applyScan, cardMarks } from '../scan/apply';
+import { CardPhoto } from '../scan/CardPhoto';
 import { cardScanEnabled } from '../scan/features';
-import { PhotoImport } from '../scan/PhotoImport';
 
 const LABELS: Record<string, string> = {
   fairway: 'Fairway',
@@ -505,9 +505,9 @@ function Scorecard({ existing }: { existing?: RoundDetail }) {
     }
   }
 
-  const applyPhoto = (scan: CardScanResult) => {
+  const applyPhoto = (scan: CardScanResult, base: LayoutDraft[] = layout) => {
     const { round, check } = applyScan(
-      { courseName, tees, playedOn, notes, holeCount, layout, drafts, check: checkHoles },
+      { courseName, tees, playedOn, notes, holeCount, layout: base, drafts, check: checkHoles },
       scan,
     );
     setCourseName(round.courseName);
@@ -535,6 +535,24 @@ function Scorecard({ existing }: { existing?: RoundDetail }) {
     setLayout(filled.layout);
     setFromCard(true);
     setPhotoNote('Par and yardage filled from your card. Check them as you play each hole.');
+  };
+
+  const applyCardPhoto = (card: CardReadResult, tee: number | null) => {
+    const marks = cardMarks(card, tee);
+    if (!marks) {
+      applyLayoutPhoto(card, tee);
+      return;
+    }
+    // Holes still to play get the card's par and yardage too; entered and marked holes keep
+    // theirs, so applyScan takes the marked holes' own par and yardage.
+    const filled = applyLayout(layout, card, tee).layout;
+    const marked = new Set(marks.holes.map((h) => h.number - 1));
+    applyPhoto(
+      marks,
+      layout.map((l, i) =>
+        !marked.has(i) && isBlank(drafts[i] ?? emptyDraft()) ? (filled[i] ?? l) : l,
+      ),
+    );
   };
 
   const applyLine = () => {
@@ -569,16 +587,8 @@ function Scorecard({ existing }: { existing?: RoundDetail }) {
             Start on the first tee and enter each hole as you finish it, or copy your card after the
             round. We&apos;ll ask for each hole&apos;s par and yardage as you go.
           </p>
-          {!existing && cardScanEnabled() && <LayoutImport onRead={applyLayoutPhoto} />}
           {!existing && cardScanEnabled() && played.length < holeCount && (
-            <PhotoImport
-              onRead={applyPhoto}
-              label={
-                played.length === 0
-                  ? 'Already marked your card? Snap it to fill the round'
-                  : 'Snap your marked card to fill the blank holes'
-              }
-            />
+            <CardPhoto onRead={applyCardPhoto} />
           )}
           <div className="row">
             <label className="field grow">

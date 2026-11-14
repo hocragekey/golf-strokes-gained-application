@@ -31,3 +31,10 @@ reads cost money per call, so they need limits, and the owner chose a cheaper op
   (`cardScanModelId: qwen.qwen3-vl-235b-a22b`) and check real cards in the app; the model can be
   changed without code changes. If Bedrock rejects tool use for the model, the reader retries
   asking for plain JSON.
+
+## Addendum: one photo button
+
+Two buttons (blank card, marked card) felt odd to the owner. A third request kind, `card`, asks the
+model for the printed layout plus any handwritten marks in one read, so a single "Snap your
+scorecard" button on the round's start screen handles both and still costs one photo read. The
+`layout` and `marks` kinds remain for the offline queue and older clients.

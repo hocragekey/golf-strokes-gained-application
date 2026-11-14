@@ -1,6 +1,7 @@
 import {
   cardScanRequestSchema,
   cardLayoutResultSchema,
+  cardReadResultSchema,
   cardScanResultSchema,
   changeProblem,
   MAX_CARD_IMAGE_BYTES,
@@ -44,6 +45,12 @@ export interface Services {
   /** Photo-read limits (FR-CARD-08); reads are unlimited without it, e.g. in local runs. */
   quota?: ScanQuota;
 }
+
+const RESULT_SCHEMAS = {
+  layout: cardLayoutResultSchema,
+  marks: cardScanResultSchema,
+  card: cardReadResultSchema,
+} as const;
 
 const OVER_LIMIT: Record<Exclude<QuotaResult, 'ok'>, string> = {
   'user-day': "You've used today's card photos. Enter this one by hand, or try again tomorrow.",
@@ -91,10 +98,7 @@ export async function handle(
       const { kind, mediaType } = parsed.data;
       // The photo is only passed through to the reader; it is never stored or logged.
       const answer = await services.cardReader.read(image, mediaType, kind);
-      const result =
-        kind === 'layout'
-          ? cardLayoutResultSchema.safeParse(answer)
-          : cardScanResultSchema.safeParse(answer);
+      const result = RESULT_SCHEMAS[kind].safeParse(answer);
       if (!result.success) return error(502, 'Could not read the scorecard');
       return { status: 200, body: result.data };
     }

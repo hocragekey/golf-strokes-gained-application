@@ -145,6 +145,30 @@ describe('card scan route', () => {
     expect(seen[0]?.[1]).toBe('image/jpeg');
   });
 
+  it('reads a card that may be blank or marked', async () => {
+    const card = {
+      courseName: 'Pebble Creek',
+      pars: [4],
+      tees: [{ name: 'Blue', yardages: [410] }],
+      holes: [],
+    };
+    const kinds: (string | undefined)[] = [];
+    const res = await handle(
+      scan({ kind: 'card', mediaType: 'image/jpeg', image: photo }),
+      new MemoryRepo(),
+      {
+        cardReader: {
+          read: (_image, _type, kind) => {
+            kinds.push(kind);
+            return Promise.resolve(card);
+          },
+        },
+      },
+    );
+    expect(res).toEqual({ status: 200, body: card });
+    expect(kinds).toEqual(['card']);
+  });
+
   it('reads a blank card layout', async () => {
     const layout = {
       courseName: 'Pebble Creek',

@@ -1,6 +1,6 @@
-import type { CardLayoutResult } from '@golf-sg/shared';
+import type { CardReadResult } from '@golf-sg/shared';
 import { useState } from 'react';
-import { Link } from 'react-router';
+import { Link, useNavigate } from 'react-router';
 import { useAccount } from '../auth/context';
 import { AuthRequiredError, ScanRejectedError } from '../sync/api';
 import { preparePhoto } from './image';
@@ -9,24 +9,25 @@ const total = (yardages: (number | null)[]): number =>
   yardages.reduce<number>((sum, y) => sum + (y ?? 0), 0);
 
 /**
- * Before tee-off: reads par and every tee row off a photo of the blank card, then asks which tees
- * the golfer is playing (FR-CARD-07). Nothing is kept: without signal the golfer enters par and
- * yardage hole by hole instead.
+ * One photo button for the scorecard (FR-CARD-06, FR-CARD-07). A blank card fills par and the
+ * chosen tees' yardages; a marked card fills the blank holes too. Without signal the photo waits
+ * on the phone and is read as a marked card once back in range.
  */
-export function LayoutImport({
+export function CardPhoto({
   onRead,
 }: {
-  onRead: (scan: CardLayoutResult, tee: number | null) => void;
+  onRead: (card: CardReadResult, tee: number | null) => void;
 }) {
   const account = useAccount();
+  const navigate = useNavigate();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [choose, setChoose] = useState<CardLayoutResult | null>(null);
+  const [choose, setChoose] = useState<CardReadResult | null>(null);
   if (!account.enabled) return null;
   if (!account.profile) {
     return (
       <p className="muted small">
-        <Link to="/account">Sign in</Link> to fill par and yardage from a photo of the scorecard.
+        <Link to="/account">Sign in</Link> to fill this round from a photo of your scorecard.
       </p>
     );
   }
@@ -35,25 +36,32 @@ export function LayoutImport({
     setError(null);
     setBusy(true);
     try {
-      if (!navigator.onLine) throw new Error('offline');
-      const scan = await account.readLayout(await preparePhoto(file));
-      if (scan.tees.length > 1) setChoose(scan);
-      else onRead(scan, scan.tees.length === 1 ? 0 : null);
+      const photo = await preparePhoto(file);
+      let card: CardReadResult;
+      try {
+        if (!navigator.onLine) throw new Error('offline');
+        card = await account.readCard(photo);
+      } catch (err) {
+        if (err instanceof ScanRejectedError || err instanceof AuthRequiredError) throw err;
+        // No signal: keep the photo on the phone and read it once back in range.
+        await account.queueScan(photo);
+        void navigate('/');
+        return;
+      }
+      if (card.tees.length > 1) setChoose(card);
+      else onRead(card, card.tees.length === 1 ? 0 : null);
     } catch (err) {
-      setError(
-        err instanceof ScanRejectedError || err instanceof AuthRequiredError
-          ? err.message
-          : "No signal to read the card. Enter par and yards as you play; they're saved on your phone.",
-      );
+      setError(err instanceof Error ? err.message : 'Could not read that photo');
     } finally {
       setBusy(false);
     }
   }
 
   if (choose) {
+    const marked = choose.holes.some((h) => h.score !== null);
     return (
       <fieldset className="photo-import tee-picker">
-        <legend>Which tees are you playing?</legend>
+        <legend>{marked ? 'Which tees did you play?' : 'Which tees are you playing?'}</legend>
         <div className="choice-grid">
           {choose.tees.map((t, i) => (
             <button
@@ -79,7 +87,7 @@ export function LayoutImport({
   return (
     <div className="photo-import">
       <label className={`button secondary${busy ? ' disabled' : ''}`}>
-        {busy ? 'Reading the card…' : 'Snap the scorecard to fill par and yards'}
+        {busy ? 'Reading your scorecard…' : 'Take a photo of your scorecard'}
         <input
           type="file"
           accept="image/*"
@@ -94,7 +102,8 @@ export function LayoutImport({
         />
       </label>
       <p className="muted small">
-        Photograph the blank card before you tee off. The photo is deleted once it&apos;s read.
+        Before your round, this fills in par and yards. After your round, it fills in your scores
+        too. The photo is deleted once it&apos;s read.
       </p>
       {error && (
         <p className="field-error" role="alert">

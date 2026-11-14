@@ -484,8 +484,10 @@ counter that was full, returned as `429` with a message. Counters carry `expires
 has TTL on it; account deletion leaves them, so deleting an account does not reset a limit. Every
 attempt counts, including reads the model fails.
 
-**Client.** `scan/LayoutImport.tsx` replaces the photo button on the details step: it reads the
-card, shows a tee picker when there are several tee rows, and `applyLayout` fills par and the
-chosen row's yardages (holes the card doesn't show keep what was typed). Layout photos are not
-queued offline; the golfer types par and yards as they play. The marked-card `PhotoImport`
-sits under it on the details step (the start of the round) and shows only while holes are blank.
+**Client.** `scan/CardPhoto.tsx` is the only photo button, on the details step while holes are
+blank. It posts `kind: 'card'`: the reader returns `cardReadResultSchema`, the blank-card layout
+plus `holes` (empty when nothing is handwritten). Several tee rows show a tee picker. A blank card
+goes through `applyLayout`; a marked one through `cardMarks` (par and the chosen row's yardage fill
+gaps) and `applyScan`, with holes still to play also taking the card's par and yardage. Without
+signal the photo is queued and later read as `marks`. The `layout` and `marks` kinds stay for
+older clients and the queue.
