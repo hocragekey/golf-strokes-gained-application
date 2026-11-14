@@ -397,7 +397,7 @@ function Scorecard({ existing }: { existing?: RoundDetail }) {
   const par = Number(lay.par) || 4;
   const steps = stepsFor(par);
 
-  const approachTyped = useRef(new Set<number>());
+  const approachSeparate = useRef(new Set<number>());
   const update = (patch: Partial<HoleDraft>) => {
     setDrafts((prev) => prev.map((d, j) => (j === pos.hole ? { ...d, ...patch } : d)));
   };
@@ -739,7 +739,8 @@ function Scorecard({ existing }: { existing?: RoundDetail }) {
                 par === 4 &&
                 (draft.approachYards === '' ||
                   draft.approachYards === draft.driveYardsLeft ||
-                  (draft.driveYardsLeft === '' && !approachTyped.current.has(pos.hole)));
+                  (draft.driveYardsLeft === '' && !approachSeparate.current.has(pos.hole)));
+              if (!linked) approachSeparate.current.add(pos.hole);
               update(linked ? { driveYardsLeft: v, approachYards: v } : { driveYardsLeft: v });
             }}
           />
@@ -803,7 +804,7 @@ function Scorecard({ existing }: { existing?: RoundDetail }) {
             autoFocus
             value={draft.approachYards}
             onChange={(v) => {
-              approachTyped.current.add(pos.hole);
+              approachSeparate.current.add(pos.hole);
               update({ approachYards: v });
             }}
           />
