@@ -620,6 +620,7 @@ function Scorecard({ existing }: { existing?: RoundDetail }) {
                   clearInProgress();
                   setCheckHoles([]);
                   setPhotoNote(null);
+                  setFromCard(false);
                   setDrafts(Array.from({ length: 18 }, emptyDraft));
                   setLayout(Array.from({ length: 18 }, emptyLayout));
                   setCourseName('');
