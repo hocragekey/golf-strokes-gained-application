@@ -1,5 +1,8 @@
 import {
+  cardScanResultSchema,
   pullResponseSchema,
+  type CardScanRequest,
+  type CardScanResult,
   pushResponseSchema,
   type Change,
   type PullResponse,
@@ -13,11 +16,22 @@ export class AuthRequiredError extends Error {
   }
 }
 
+/** The reader refused or could not make sense of the photo; retrying the same photo won't help. */
+export class ScanRejectedError extends Error {}
+
 export interface SyncApi {
   push(changes: Change[]): Promise<PushResponse>;
   pull(since: string | undefined): Promise<PullResponse>;
   deleteAccount(): Promise<void>;
+  scanCard(scan: CardScanRequest): Promise<CardScanResult>;
 }
+
+const SCAN_REJECTED: Record<number, string> = {
+  400: 'That photo could not be used.',
+  413: 'That photo is too large.',
+  502: "We couldn't read that scorecard.",
+  503: 'Reading scorecard photos is switched off.',
+};
 
 /** Same-origin sync API client; CloudFront routes /api/* to API Gateway. */
 export function httpSyncApi(
@@ -35,6 +49,8 @@ export function httpSyncApi(
       },
     });
     if (res.status === 401 || res.status === 403) throw new AuthRequiredError();
+    const rejected = path === '/card-scan' ? SCAN_REJECTED[res.status] : undefined;
+    if (rejected) throw new ScanRejectedError(rejected);
     if (!res.ok) throw new Error(`Sync failed (${String(res.status)})`);
     return res.status === 204 ? undefined : res.json();
   }
@@ -50,5 +66,9 @@ export function httpSyncApi(
     deleteAccount: async () => {
       await call('/account', { method: 'DELETE' });
     },
+    scanCard: async (scan) =>
+      cardScanResultSchema.parse(
+        await call('/card-scan', { method: 'POST', body: JSON.stringify(scan) }),
+      ),
   };
 }

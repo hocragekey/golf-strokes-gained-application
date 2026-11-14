@@ -1,10 +1,11 @@
-import { changeKey, isNewer, type Change } from '@golf-sg/shared';
+import { changeKey, isNewer, type CardScanResult, type Change } from '@golf-sg/shared';
 import type { SyncApi } from '../sync/api';
 
 /** In-memory stand-in for the sync API with the same last-writer-wins rules. */
 export function fakeServer() {
   const items = new Map<string, { change: Change; seq: number }>();
   let seq = 0;
+  const scans: CardScanResult[] = [];
   const api: SyncApi = {
     push: (changes) => {
       const res = { applied: [] as string[], stale: [] as string[], rejected: [] };
@@ -31,6 +32,10 @@ export function fakeServer() {
       items.clear();
       return Promise.resolve();
     },
+    scanCard: () => {
+      const next = scans.shift();
+      return next ? Promise.resolve(next) : Promise.reject(new Error('No signal'));
+    },
   };
-  return { api, items };
+  return { api, items, scans };
 }

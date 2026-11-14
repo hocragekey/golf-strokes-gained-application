@@ -1,4 +1,5 @@
 export * from './baseline.js';
+export * from './card-scan.js';
 export * from './insights.js';
 export * from './notation.js';
 export * from './schemas.js';

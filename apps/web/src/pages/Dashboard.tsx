@@ -5,6 +5,7 @@ import { BaselineSelect } from '../components/BaselineSelect';
 import { Hero, HowItWorks } from '../components/Hero';
 import { PracticeFirst } from '../components/Practice';
 import { ResumeRound } from '../components/ResumeRound';
+import { ScanStatus } from '../scan/ScanStatus';
 import { Trend } from '../components/Trend';
 import { SgBars, SgValue } from '../components/Sg';
 import { formatNumber, formatPct } from '../format';
@@ -70,6 +71,7 @@ export function Dashboard() {
   if (s.rounds === 0) {
     return (
       <div className="stack">
+        <ScanStatus />
         <ResumeRound />
         <Hero />
         <HowItWorks />
@@ -81,6 +83,7 @@ export function Dashboard() {
   const t = s.traditional;
   return (
     <div className="stack">
+      <ScanStatus />
       <ResumeRound />
       <Hero compact />
       <div className="card-header">

@@ -32,7 +32,9 @@ runs:
     - id: config
       name: Read app config
       shell: bash
-      run: echo "google_client_id=$(jq -r '.googleClientId // ""' config/app.json)" >> "$GITHUB_OUTPUT"
+      run: |
+        echo "google_client_id=$(jq -r '.googleClientId // ""' config/app.json)" >> "$GITHUB_OUTPUT"
+        echo "card_scan_model_id=$(jq -r '.cardScanModelId // ""' config/app.json)" >> "$GITHUB_OUTPUT"
 
     # Sign-in and sync ship only when a Google client is configured (FR-ACCT-05).
     - id: api
@@ -43,6 +45,7 @@ runs:
         ENVIRONMENT: ${{ inputs.environment }}
         EXECUTION_ROLE_ARN: ${{ inputs.execution-role-arn }}
         GOOGLE_CLIENT_ID: ${{ steps.config.outputs.google_client_id }}
+        CARD_SCAN_MODEL_ID: ${{ steps.config.outputs.card_scan_model_id }}
         SHA: ${{ github.sha }}
       run: |
         account=$(aws sts get-caller-identity --query Account --output text)
@@ -67,6 +70,7 @@ runs:
           --parameter-overrides \
             "Environment=$ENVIRONMENT" \
             "GoogleClientId=$GOOGLE_CLIENT_ID" \
+            "CardScanModelId=$CARD_SCAN_MODEL_ID" \
             "CodeBucket=$bucket" \
             "CodeKey=$key" \
           --tags app=golf-sg "environment=$ENVIRONMENT"

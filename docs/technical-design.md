@@ -376,6 +376,7 @@ expiry before any code runs. Routes:
 | `POST /api/sync`      | `{ changes: Change[] }` (max 100)     | `{ applied: string[], stale: string[], rejected: [{ id, reason }] }` |
 | `GET /api/sync`       | `?since=<cursor>` (omit = everything) | `{ changes: Change[], cursor, more }` (pages of 200)                 |
 | `DELETE /api/account` | none                                  | `204`; every item for the caller is deleted                          |
+| `POST /api/card-scan` | `{ mediaType, image }` (base64 photo) | scorecard marks per hole (section 13.2); `503` while switched off    |
 
 `Change = { kind: 'round' | 'course', id, updatedAt, deletedAt: string | null, data?: Round | Course }`
 (shared Zod schema in `packages/shared/src/sync.ts`). A change with `deletedAt` is a tombstone and
@@ -432,3 +433,27 @@ pull that writes rounds back.
 **CSP additions** (Google Identity Services): `script-src https://accounts.google.com/gsi/client`,
 `style-src https://accounts.google.com/gsi/style`, `frame-src https://accounts.google.com/gsi/`,
 `connect-src https://accounts.google.com/gsi/`, `img-src https://*.googleusercontent.com`.
+
+### 13.2 Scorecard photo reading (FR-CARD-06; ADR 0014)
+
+**Switch.** `cardScanModelId` in `config/app.json` (empty = off). The deploy action passes it to
+`api.yml` as `CardScanModelId`, which sets `CARD_SCAN_MODEL_ID` on the function and adds a
+`bedrock:InvokeModel` policy for foundation models and inference profiles. `vite.config.ts` sets
+`VITE_CARD_SCAN=true` from the same value (and a Google client ID), which shows the photo button.
+
+**Server.** `handle(req, repo, { cardReader })` routes `POST /api/card-scan`: `400` for a bad
+body, `413` over 3.75 MB, `503` without a reader, `502` when the model's answer fails
+`cardScanResultSchema`. `bedrockCardReader` (`apps/sync/src/card-reader.ts`) calls Converse with
+the marking instructions, the image and a forced `record_scorecard` tool whose JSON schema
+mirrors `scannedHoleSchema`: `{ number, par, yardage, score, drive, putts, stats, unsure }` per
+hole, plus `courseName` and `tees`. Timeouts are 30 s (Lambda and integration).
+
+**Client.** `scan/PhotoImport.tsx` (round details step, new rounds, signed in) shrinks the photo
+(`scan/image.ts`) and calls the API. With no signal or a network failure it stores the photo in
+Dexie version 4's `scans` table and goes Home, where `ScanStatus` says it is waiting. The account
+provider reads queued photos oldest first on sign-in, on `online` and on enqueue
+(`scan/queue.ts`); rejections (`ScanRejectedError`) drop the photo and leave a notice. `applyScan`
+fills blank holes only, takes par and yardage from the photo where missing, parses each hole with
+`parseCardMarks` and records `check` holes (unsure or unparsable) in the round in progress. Entry
+opens at the first check hole's review, shows check holes as errors until visited, and keeps the
+normal validation before save. Sign-out clears queued photos and notices.
