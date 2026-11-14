@@ -8,10 +8,13 @@ export type NotationResult = { ok: true; fields: NotationFields } | { ok: false;
 /** What the golfer writes for one hole on the two-row card (see the card guide). */
 export interface CardMarks {
   score: number;
-  /** Drive arrow or letter: ↑/F fairway, ←/L left, →/R right, ↓/S short, ✕/X/P penalty. */
+  /** Drive arrow or letter: ↑/F fairway, ←/L left, →/R right, ↓/S short, ✕/X drop, ✕✕/XX re-tee. */
   drive: string | null;
   putts: number;
-  /** Spare row: `approach yards / chip / first-putt feet`, e.g. `175 / s15 / 8`. */
+  /**
+   * Spare row: `[yards left after drive /] approach yards / chip / first-putt feet`, e.g.
+   * `175 / s15 / 8` or, on a par 5, `250 / 110 / 25`.
+   */
   stats: string;
 }
 
@@ -27,6 +30,8 @@ const DRIVE: Record<string, TeeResult> = {
   x: 'penalty',
   '✕': 'penalty',
   p: 'penalty',
+  xx: 'ob',
+  '✕✕': 'ob',
 };
 const APPROACH_LIE = { f: 'fairway', r: 'rough', s: 'sand', t: 'recovery' } as const;
 const CHIP_LIE: Record<string, ShortGameLie> = { f: 'fairway', r: 'rough', s: 'sand' };
@@ -56,11 +61,35 @@ export function parseCardMarks(marks: CardMarks, par: number): NotationResult {
     .split('/')
     .map((s) => s.trim())
     .filter(Boolean);
+  const unknown = (item: string) =>
+    fail(`Didn't understand "${item}": use chip like "s15" and putt feet like "8"`);
+  const isChip = (item: string | undefined) => item !== undefined && /^[frs]\d+$/.test(item);
+  const isFeet = (item: string | undefined) => item !== undefined && /^\d+$/.test(item);
+
+  let firstPuttFeet: number | null = null;
+  if (putts > 0) {
+    if (!isFeet(items.at(-1))) return fail('Add the first-putt feet at the end');
+    firstPuttFeet = Number(items.pop());
+  } else if (isFeet(items.at(-1)) && isChip(items.at(-2))) {
+    return fail('No putts, so leave out the putt feet');
+  }
+  let chip: { lie: ShortGameLie; yards: number } | null = null;
+  const c = /^([frs])(\d+)$/.exec(items.at(-1) ?? '');
+  if (c) {
+    chip = { lie: CHIP_LIE[c[1] ?? 'f'] ?? 'fairway', yards: Number(c[2]) };
+    items.pop();
+  }
+
   let approachYards: number | null = null;
   let approachLie: NotationFields['approachLie'] = isPar3 ? 'tee' : 'fairway';
+  let driveYardsLeft: number | null = null;
   if (!isPar3) {
-    const m = /^(\d+)([frst]?)$/.exec(items.shift() ?? '');
-    if (!m) return fail('Start the numbers with the approach yards, e.g. "165"');
+    const approachItem = items.pop();
+    if (approachItem === undefined) {
+      return fail('Add the approach yards and the first-putt feet, e.g. "150 / 25"');
+    }
+    const m = /^(\d+)([frst]?)$/.exec(approachItem);
+    if (!m) return unknown(approachItem);
     approachYards = Number(m[1]);
     const lie = m[2] as keyof typeof APPROACH_LIE | '';
     approachLie = lie
@@ -68,30 +97,28 @@ export function parseCardMarks(marks: CardMarks, par: number): NotationResult {
       : teeResult === 'left' || teeResult === 'right'
         ? 'rough'
         : 'fairway';
-  }
-
-  let chip: { lie: ShortGameLie; yards: number } | null = null;
-  let firstPuttFeet: number | null = null;
-  for (const [i, item] of items.entries()) {
-    const c = /^([frs])(\d+)$/.exec(item);
-    if (c && !chip && firstPuttFeet === null) {
-      chip = { lie: CHIP_LIE[c[1] ?? 'f'] ?? 'fairway', yards: Number(c[2]) };
-    } else if (/^\d+$/.test(item) && i === items.length - 1) {
-      firstPuttFeet = Number(item);
-    } else {
-      return fail(`Didn't understand "${item}": use chip like "s15" and putt feet like "8"`);
+    const driveItem = items.pop();
+    if (driveItem !== undefined) {
+      if (!isFeet(driveItem)) return unknown(driveItem);
+      driveYardsLeft = Number(driveItem);
     }
   }
-  if (putts > 0 && firstPuttFeet === null) return fail('Add the first-putt feet at the end');
-  if (putts === 0 && firstPuttFeet !== null) return fail('No putts, so leave out the putt feet');
+  const extra = items[0];
+  if (extra !== undefined) return unknown(extra);
 
-  const penalties = teeResult === 'penalty' ? 1 : 0;
-  const shortGameShots = chip ? Math.max(1, score - putts - penalties - (par - 2)) : 0;
+  const penalties = teeResult === 'penalty' || teeResult === 'ob' ? 1 : 0;
+  // Shots up to and including the approach: tee shot(s), any lay-ups, the approach. A separate
+  // drive distance means at least one lay-up; par 5s assume one.
+  const teeShots = teeResult === 'ob' ? 2 : 1;
+  const layUps = Math.max(driveYardsLeft === null ? 0 : 1, par - 4);
+  const toApproach = isPar3 ? 1 : teeShots + layUps + 1;
+  const shortGameShots = chip ? Math.max(1, score - putts - penalties - toApproach) : 0;
   return {
     ok: true,
     fields: {
       score,
       teeResult,
+      driveYardsLeft,
       approachYards,
       approachLie,
       gir: !chip && score - Math.max(putts, 1) <= par - 2,
@@ -120,7 +147,7 @@ export function parseHoleNotation(line: string, par: number): NotationResult {
   const score = tokens[i++];
   const drive = isNumber(tokens[i]) ? null : (tokens[i++] ?? null);
   const putts = tokens[i++];
-  if (!isNumber(score) || !isNumber(putts) || (drive !== null && drive.length !== 1)) {
+  if (!isNumber(score) || !isNumber(putts) || (drive !== null && drive.length > 2)) {
     return {
       ok: false,
       error:

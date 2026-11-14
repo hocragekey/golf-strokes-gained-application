@@ -14,12 +14,13 @@ const TOOL = 'record_scorecard';
 
 export const CARD_SCAN_INSTRUCTIONS = `You read golf scorecards that the golfer marked like this:
 - The golfer's own row: the score in the middle of each hole's box. Top-left corner (par 4 and 5
-  only): a drive arrow: up = fairway (F), left arrow = L, right arrow = R, down = short (S), a cross
-  = penalty (X). Bottom-right corner: a small number = putts. Circles or squares around a score
+  only): a drive arrow: up = fairway (F), left arrow = L, right arrow = R, down = short (S), one
+  cross = penalty drop (X), two crosses = out of bounds re-tee (XX). Bottom-right corner: a small number = putts. Circles or squares around a score
   are birdie/bogey decorations: ignore them. A dot on one side of the box is a missed-green side:
   ignore it.
-- The row underneath (spare row): "approach yards / chip / first putt feet", e.g. "175 / s15 / 8",
-  "140 / 30", "190 / r25" or, on a par 3, "s10 / 5". Copy it exactly as written, with " / "
+- The row underneath (spare row): "[yards left after drive /] approach yards / chip / first putt
+  feet", e.g. "175 / s15 / 8", "140 / 30", "190 / r25", on a par 5 "250 / 110 / 25" or, on a par
+  3, "s10 / 5". Copy it exactly as written, with " / "
   between items and lowercase lie letters.
 Also read the printed course name, the tees of the yardage row the golfer most likely played
 (say which in "tees"), and each hole's printed par and yardage.
@@ -34,7 +35,7 @@ const hole = {
     par: { type: ['integer', 'null'], minimum: 3, maximum: 6 },
     yardage: { type: ['integer', 'null'], minimum: 50, maximum: 800 },
     score: { type: ['integer', 'null'], minimum: 1, maximum: 20 },
-    drive: { type: ['string', 'null'], enum: ['F', 'L', 'R', 'S', 'X', null] },
+    drive: { type: ['string', 'null'], enum: ['F', 'L', 'R', 'S', 'X', 'XX', null] },
     putts: { type: ['integer', 'null'], minimum: 0, maximum: 10 },
     stats: { type: 'string', maxLength: 40 },
     unsure: { type: 'boolean' },

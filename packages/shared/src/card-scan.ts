@@ -24,7 +24,7 @@ export const scannedHoleSchema = z.object({
   par: nullableInt(3, 6),
   yardage: nullableInt(50, 800),
   score: nullableInt(1, 20),
-  /** Drive mark as a letter: F, L, R, S or X; null on par 3s or when unmarked. */
+  /** Drive mark as letters: F, L, R, S, X (drop) or XX (re-tee); null on par 3s or when unmarked. */
   drive: z.string().max(3).nullable(),
   putts: nullableInt(0, 10),
   /** Spare-row text, e.g. `175 / s15 / 8`. */

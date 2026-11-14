@@ -49,7 +49,54 @@ describe('holeStrokesGained', () => {
     expect(sg.putting).toBeCloseTo(E(4, 'green') - 1, 1);
   });
 
-  it('charges lay-ups on par 5s to off-the-tee', () => {
+  it('charges lay-ups to approach when the drive position is known', () => {
+    const sg = holeStrokesGained(
+      par5,
+      entry({
+        holeNumber: 3,
+        score: 5,
+        teeResult: 'fairway',
+        driveYardsLeft: 250,
+        approachYards: 100,
+        firstPuttFeet: 10,
+      }),
+    );
+    expect(sg.offTheTee).toBeCloseTo(E(520, 'tee') - E(250, 'fairway') - 1, 1);
+    expect(sg.approach).toBeCloseTo(E(250, 'fairway') - E(10, 'green') - 2, 1);
+    expect(sg.offTheTee + sg.approach + sg.aroundTheGreen + sg.putting).toBeCloseTo(sg.total, 1);
+  });
+
+  it('costs a re-tee about two strokes off the tee', () => {
+    const sg = holeStrokesGained(
+      par4,
+      entry({
+        score: 6,
+        teeResult: 'ob',
+        penalties: 1,
+        approachYards: 150,
+        gir: false,
+        firstPuttFeet: 20,
+        putts: 2,
+      }),
+    );
+    expect(sg.offTheTee).toBeCloseTo(E(400, 'tee') - E(150, 'fairway') - 2 - 1, 1);
+    expect(sg.approach).toBeCloseTo(E(150, 'fairway') - E(20, 'green') - 1, 1);
+  });
+
+  it('handles rounds stored before the drive position existed', () => {
+    const { driveYardsLeft: _unused, ...old } = entry({
+      holeNumber: 3,
+      score: 5,
+      teeResult: 'fairway',
+      approachYards: 100,
+      firstPuttFeet: 10,
+    });
+    const sg = holeStrokesGained(par5, old as HoleEntry);
+    expect(Number.isFinite(sg.offTheTee)).toBe(true);
+    expect(sg.offTheTee).toBeCloseTo(E(520, 'tee') - E(100, 'fairway') - 2, 1);
+  });
+
+  it('still charges lay-ups to off-the-tee for rounds without a drive position', () => {
     const sg = holeStrokesGained(
       par5,
       entry({

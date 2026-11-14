@@ -11,6 +11,7 @@ import {
 export interface HoleDraft {
   score: string;
   teeResult: string;
+  driveYardsLeft: string;
   approachYards: string;
   approachLie: string;
   missDirection: string;
@@ -25,6 +26,7 @@ export interface HoleDraft {
 export const emptyDraft = (): HoleDraft => ({
   score: '',
   teeResult: '',
+  driveYardsLeft: '',
   approachYards: '',
   approachLie: 'fairway',
   missDirection: '',
@@ -42,6 +44,7 @@ export function draftFromEntry(entry: HoleEntry): HoleDraft {
   return {
     score: str(entry.score),
     teeResult: str(entry.teeResult),
+    driveYardsLeft: str(entry.driveYardsLeft),
     approachYards: str(entry.approachYards),
     approachLie: entry.approachLie,
     missDirection: str(entry.missDirection),
@@ -74,6 +77,7 @@ export function draftToInput(d: HoleDraft, hole: CourseHole): HoleEntryInput {
     holeNumber: hole.number,
     score: num(d.score) ?? Number.NaN,
     teeResult: isPar3 ? null : (opt(d.teeResult) as HoleEntryInput['teeResult']),
+    driveYardsLeft: isPar3 ? null : num(d.driveYardsLeft),
     approachYards: isPar3 ? null : num(d.approachYards),
     approachLie: (isPar3 ? 'tee' : d.approachLie) as HoleEntryInput['approachLie'],
     gir,

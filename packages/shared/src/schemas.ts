@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
-export const TEE_RESULTS = ['fairway', 'left', 'right', 'short', 'penalty'] as const;
+/** `penalty` = took a drop; `ob` = re-teed (stroke and distance: two tee shots plus a penalty). */
+export const TEE_RESULTS = ['fairway', 'left', 'right', 'short', 'penalty', 'ob'] as const;
 export const APPROACH_LIES = ['tee', 'fairway', 'rough', 'sand', 'recovery'] as const;
 export const SHORT_GAME_LIES = ['fringe', 'fairway', 'rough', 'sand'] as const;
 export const MISS_DIRECTIONS = ['left', 'right', 'long', 'short'] as const;
@@ -55,6 +56,8 @@ export const holeEntrySchema = z.object({
   holeNumber: z.number().int().min(1).max(18),
   score: z.number().int().min(1).max(20),
   teeResult: z.enum(TEE_RESULTS).nullable().default(null),
+  /** Yards to the pin where the drive (or re-teed drive) finished; par 4/5. */
+  driveYardsLeft: nullableInt(1, 700).default(null),
   approachYards: nullableInt(1, 700).default(null),
   approachLie: z.enum(APPROACH_LIES).default('fairway'),
   gir: z.boolean(),

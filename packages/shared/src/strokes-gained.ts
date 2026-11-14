@@ -1,5 +1,12 @@
 import { DEFAULT_BASELINE, type Baseline, type BaselineLie } from './baseline.js';
-import type { CourseHole, HoleEntry, HoleSg, SgCategories, ShortGameLie } from './schemas.js';
+import type {
+  CourseHole,
+  HoleEntry,
+  HoleSg,
+  SgCategories,
+  ShortGameLie,
+  TeeResult,
+} from './schemas.js';
 import { strokesBeforeApproach } from './validation.js';
 
 interface Position {
@@ -8,6 +15,9 @@ interface Position {
 }
 
 const HOLED: Position = { distance: 0, lie: 'green' };
+
+const driveLie = (result: TeeResult | null): BaselineLie =>
+  result === 'left' || result === 'right' ? 'rough' : 'fairway';
 
 const shortGameLie = (lie: ShortGameLie | null): BaselineLie =>
   lie === 'sand' ? 'sand' : lie === 'rough' ? 'rough' : 'fairway';
@@ -25,10 +35,12 @@ export const emptyCategories = (): SgCategories => ({
 /**
  * Strokes gained for one hole: SG(shot) = E(start) - E(end) - strokes.
  *
- * The hole is split at the positions the golfer records: tee -> approach -> first short-game
- * shot -> first putt -> holed. Lay-ups and recoveries before the approach count toward
- * off-the-tee. Penalties count toward off-the-tee when the tee result is `penalty`, otherwise
- * toward approach. Category values always sum to E(tee) - score.
+ * The hole is split at the positions the golfer records: tee -> where the drive finished ->
+ * approach -> first short-game shot -> first putt -> holed. Off the tee covers the tee shot(s)
+ * (two after a re-tee); lay-ups and recoveries between the drive and the approach count toward
+ * approach, as in standard strokes gained. Without the drive position (older rounds) every shot
+ * before the approach counts toward off the tee. Penalties count toward off the tee when the tee
+ * result is `penalty` or `ob`, otherwise toward approach. Categories sum to E(tee) - score.
  */
 export function holeStrokesGained(
   hole: CourseHole,
@@ -53,11 +65,25 @@ export function holeStrokesGained(
   const afterApproach = shortGame ?? putt;
 
   const before = Math.max(0, strokesBeforeApproach(entry));
-  const teePenalty = entry.teeResult === 'penalty' && !isPar3 ? entry.penalties : 0;
+  const teeShots = isPar3 ? 0 : Math.min(before, entry.teeResult === 'ob' ? 2 : 1);
+  const layUps = before - teeShots;
+  const afterDrive: Position | null =
+    // Rounds saved before the field existed have no value at all, not null.
+    !isPar3 && layUps > 0 && typeof entry.driveYardsLeft === 'number'
+      ? { distance: entry.driveYardsLeft, lie: driveLie(entry.teeResult) }
+      : null;
+  const teePenalty =
+    !isPar3 && (entry.teeResult === 'penalty' || entry.teeResult === 'ob') ? entry.penalties : 0;
   const approachPenalty = entry.penalties - teePenalty;
 
-  const offTheTee = isPar3 ? 0 : E(tee) - E(approach) - before - teePenalty;
-  const approachSg = E(approach) - E(afterApproach) - 1 - approachPenalty - (isPar3 ? before : 0);
+  const offTheTee = isPar3
+    ? 0
+    : afterDrive
+      ? E(tee) - E(afterDrive) - teeShots - teePenalty
+      : E(tee) - E(approach) - before - teePenalty;
+  const layUpSg = afterDrive ? E(afterDrive) - E(approach) - layUps : 0;
+  const approachSg =
+    E(approach) - E(afterApproach) - 1 - approachPenalty - (isPar3 ? before : 0) + layUpSg;
   const aroundTheGreen = shortGame ? E(shortGame) - E(putt) - entry.shortGameShots : 0;
   const putting = entry.putts > 0 ? E(putt) - entry.putts : 0;
 

@@ -5,7 +5,7 @@ const SCORE_ROW: [mark: string, write: string, when: string][] = [
   ['Score', 'In the middle of the box, as usual. Penalty strokes included.', 'Every hole'],
   [
     'Drive',
-    'Top-left corner: ↑ fairway, ← missed left, → missed right, ↓ short or topped, ✕ penalty.',
+    'Top-left corner: ↑ fairway, ← missed left, → missed right, ↓ short or topped, ✕ penalty drop, ✕✕ out of bounds and re-tee.',
     'Par 4s and 5s',
   ],
   ['Putts', 'Bottom-right corner: count only putts from on the green.', 'Every hole'],
@@ -16,9 +16,10 @@ const SCORE_ROW: [mark: string, write: string, when: string][] = [
   ],
 ];
 
-/** The spare row underneath: approach yards / chip / first-putt feet. */
+/** The spare row underneath: [yards left after drive /] approach yards / chip / first-putt feet. */
 const EXAMPLES: [card: string, story: string][] = [
-  ['140 / 30', 'Approach from 140 yds onto the green, first putt from 30 ft.'],
+  ['140 / 30', 'Par 4: approach from 140 yds onto the green, first putt from 30 ft.'],
+  ['250 / 110 / 25', 'Par 5: 250 yds left after the drive, approach from 110 yds, 25 ft putt.'],
   ['175 / s15 / 8', 'Approach from 175 yds, bunker shot from 15 yds, first putt from 8 ft.'],
   ['190 / r25', 'Chipped in from 25 yds in the rough, so no putts.'],
   ['s10 / 5', 'Par 3: the tee shot is the approach, so no yards. Bunker shot, 5 ft putt.'],
@@ -78,6 +79,11 @@ export function CardGuide() {
           <code>approach yards / chip / first putt feet</code>
         </p>
         <p className="muted">
+          On a par 4 the approach is usually from where your drive finished. If it wasn&apos;t (a
+          par 5, a lay-up or a punch-out), put the yards left after your drive first:{' '}
+          <code>250 / 110 / 25</code>.
+        </p>
+        <p className="muted">
           Chip: a lie letter (<code>r</code> rough, <code>s</code> sand, <code>f</code> fairway or
           fringe) and the yards to the pin; paces are fine. Leave it out if you hit the green. Add{' '}
           <code>s</code> to the approach (<code>165s</code>) if it was from a bunker.
@@ -102,7 +108,9 @@ export function CardGuide() {
           <li>Green in regulation: score minus putts is at most par minus 2.</li>
           <li>Number of chips: from the score, putts and shots to reach the green.</li>
           <li>Approach lie: a drive missed left or right means the approach was from the rough.</li>
-          <li>Penalty: a ✕ drive counts one penalty stroke.</li>
+          <li>
+            Penalty: ✕ counts one penalty stroke; ✕✕ counts the re-tee and one penalty stroke.
+          </li>
         </ul>
       </section>
 

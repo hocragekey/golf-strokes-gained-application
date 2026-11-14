@@ -136,7 +136,12 @@ describe('RoundEntry', () => {
     await user.click(button('5 Bogey'));
     expect(screen.getByRole('heading', { name: 'Where did your drive finish?' })).toBeVisible();
     await user.click(button('Right'));
-    await user.type(screen.getByLabelText('Approach yards'), '165');
+    expect(
+      screen.getByRole('heading', { name: 'How far did you have left after your drive?' }),
+    ).toBeVisible();
+    await user.type(screen.getByLabelText('Yards left'), '165');
+    await user.click(button('Next'));
+    expect(screen.getByLabelText('Approach yards')).toHaveValue(165);
     await user.click(button('Rough'));
     await user.click(button('Next'));
     expect(
@@ -203,7 +208,7 @@ describe('RoundEntry', () => {
     await user.type(screen.getByLabelText('Yards'), '160');
     await user.click(button('Next'));
     await user.click(button('3 Par'));
-    await user.click(button('None'));
+    await user.click(button('On the green'));
     await user.click(button('2'));
     await user.type(screen.getByLabelText('First putt'), '20');
     await user.click(button('Next'));

@@ -74,28 +74,31 @@ reference a course (ADR 0010); a course data integration (FR-COURSE-04) will fil
 A round is self-contained: it carries the par and yardage of every hole it played (`layout`), so
 the SG engine never needs a saved course (ADR 0010).
 
-| Field                | Type / domain                                          | Notes                                        |
-| -------------------- | ------------------------------------------------------ | -------------------------------------------- |
-| `round.id`           | UUID                                                   |                                              |
-| `courseName`, `tees` | string ≤ 100 / ≤ 40, may be empty                      | display only                                 |
-| `layout[]`           | `{ number, par, yardage }`                             | one per played hole; par 3–6; yardage 50–800 |
-| `playedOn`           | ISO date                                               | defaults to today in local time              |
-| `notes`              | string ≤ 1000                                          |                                              |
-| `holes[]`            | 1–18 `HoleEntry`, numbered 1..n                        |                                              |
-| `score`              | 1–20                                                   | includes penalties                           |
-| `teeResult`          | `fairway \| left \| right \| short \| penalty \| null` | required on par 4/5, null on par 3           |
-| `approachYards`      | 1–700 or null                                          | required on par 4/5; par 3 uses hole yardage |
-| `approachLie`        | `tee \| fairway \| rough \| sand \| recovery`          | `tee` only on par 3                          |
-| `gir`                | boolean                                                |                                              |
-| `missDirection`      | `left \| right \| long \| short \| null`               | only when not GIR                            |
-| `shortGameShots`     | 0–10                                                   | non-putt shots inside ~50 yds                |
-| `shortGameYards`     | 1–60 or null                                           | first short-game shot                        |
-| `shortGameLie`       | `fringe \| fairway \| rough \| sand \| null`           |                                              |
-| `firstPuttFeet`      | 1–150 or null                                          | required iff putts > 0                       |
-| `putts`              | 0–10                                                   | 0 = holed from off the green                 |
-| `penalties`          | 0–10                                                   |                                              |
+| Field                | Type / domain                                          | Notes                                                          |
+| -------------------- | ------------------------------------------------------ | -------------------------------------------------------------- |
+| `round.id`           | UUID                                                   |                                                                |
+| `courseName`, `tees` | string ≤ 100 / ≤ 40, may be empty                      | display only                                                   |
+| `layout[]`           | `{ number, par, yardage }`                             | one per played hole; par 3–6; yardage 50–800                   |
+| `playedOn`           | ISO date                                               | defaults to today in local time                                |
+| `notes`              | string ≤ 1000                                          |                                                                |
+| `holes[]`            | 1–18 `HoleEntry`, numbered 1..n                        |                                                                |
+| `score`              | 1–20                                                   | includes penalties                                             |
+| `teeResult`          | `fairway \| left \| right \| short \| penalty \| null` | required on par 4/5, null on par 3                             |
+| `driveYardsLeft`     | 1–700 or null                                          | par 4/5: yards left after the drive (re-teed drive after `ob`) |
+| `approachYards`      | 1–700 or null                                          | required on par 4/5; par 3 uses hole yardage                   |
+| `approachLie`        | `tee \| fairway \| rough \| sand \| recovery`          | `tee` only on par 3                                            |
+| `gir`                | boolean                                                |                                                                |
+| `missDirection`      | `left \| right \| long \| short \| null`               | only when not GIR                                              |
+| `shortGameShots`     | 0–10                                                   | non-putt shots inside ~50 yds                                  |
+| `shortGameYards`     | 1–60 or null                                           | first short-game shot                                          |
+| `shortGameLie`       | `fringe \| fairway \| rough \| sand \| null`           |                                                                |
+| `firstPuttFeet`      | 1–150 or null                                          | required iff putts > 0                                         |
+| `putts`              | 0–10                                                   | 0 = holed from off the green                                   |
+| `penalties`          | 0–10                                                   |                                                                |
 
-The two-row card marks (FR-CARD-01) map onto these fields as follows. From the score box:
+The two-row card marks (FR-CARD-01) map onto these fields as follows. A spare row with two leading
+numbers on a par 4/5 (`250 / 110 / 25`) sets `driveYardsLeft` then `approachYards`; `✕✕` (XX) is
+`teeResult = ob` with one penalty stroke. From the score box:
 `score`, the drive arrow → `teeResult` (✕ also sets `penalties = 1`) and putts → `putts`.
 From the spare row `approach / chip / first putt`: approach yards → `approachYards`, with
 `approachLie` from an optional `r`/`s`/`t` suffix, otherwise `rough` after a drive missed left or
@@ -138,28 +141,32 @@ default for unknown IDs so a stale preference can never break the app.
 
 ### 4.2 Positions recorded per hole
 
-`tee (yardage, tee)` → `approach (approachYards, approachLie)` → `short game (shortGameYards,
+`tee (yardage, tee)` → `after drive (driveYardsLeft; rough after a drive missed left/right, else
+fairway)` → `approach (approachYards, approachLie)` → `short game (shortGameYards,
 lie)` → `first putt (firstPuttFeet, green)` → `holed`. On par 3s the approach position is the tee.
 Short-game lies map `fringe`/`fairway` → `fairway`, `rough` → `rough`, `sand` → `sand`.
 
 ### 4.3 Category formulas
 
 With `E` the baseline, `before = score − putts − shortGameShots − penalties − 1` (long-game strokes
-before the approach), `teePen` = penalties if `teeResult = penalty` (par 4/5), else 0:
+before the approach), `teeShots` = 2 after a re-tee (`teeResult = ob`) else 1 (capped at `before`),
+`layUps = before − teeShots`, `teePen` = penalties if `teeResult` is `penalty` or `ob` (par 4/5),
+else 0:
 
-| Category         | Formula                                                                                                      |
-| ---------------- | ------------------------------------------------------------------------------------------------------------ |
-| Off the tee      | par 3: 0; else `E(tee) − E(approach) − before − teePen`                                                      |
-| Approach         | `E(approach) − E(next) − 1 − (penalties − teePen) − (par 3 ? before : 0)`, `next` = short game or first putt |
-| Around the green | if short game: `E(shortGame) − E(firstPutt or holed) − shortGameShots`, else 0                               |
-| Putting          | if putts > 0: `E(firstPutt) − putts`, else 0                                                                 |
-| Total            | `E(tee) − score`                                                                                             |
+| Category         | Formula                                                                                                                                                                          |
+| ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Off the tee      | par 3: 0; with a drive position and lay-ups: `E(tee) − E(afterDrive) − teeShots − teePen`; else `E(tee) − E(approach) − before − teePen`                                         |
+| Approach         | `E(approach) − E(next) − 1 − (penalties − teePen) − (par 3 ? before : 0)` plus, with a drive position, `E(afterDrive) − E(approach) − layUps`; `next` = short game or first putt |
+| Around the green | if short game: `E(shortGame) − E(firstPutt or holed) − shortGameShots`, else 0                                                                                                   |
+| Putting          | if putts > 0: `E(firstPutt) − putts`, else 0                                                                                                                                     |
+| Total            | `E(tee) − score`                                                                                                                                                                 |
 
 **Invariant:** the four categories sum to the total for every hole (tested). Values are rounded to
 two decimals per hole; aggregates sum rounded hole values.
 
-Known simplifications (ADR 0004): par-5 lay-ups and recoveries before the recorded approach count
-toward off the tee; intermediate long-game positions are not recorded.
+Lay-ups and recoveries between the drive and the approach count toward approach, as in standard
+strokes gained (ADR 0015). Rounds saved before `driveYardsLeft` existed keep the original rule
+(ADR 0004): every shot before the approach counts toward off the tee.
 
 ## 5. Validation (FR-ENTRY-03)
 
