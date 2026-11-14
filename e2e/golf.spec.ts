@@ -10,7 +10,7 @@ async function answerHoleOne(page: Page) {
   await tap('Next');
   await page.getByLabel('Approach yards').fill('165');
   await tap('Rough');
-  await tap('Next');
+  await tap('Missed short');
   await tap('1');
   await page.getByLabel('Short-game yards').fill('15');
   await tap('Bunker');

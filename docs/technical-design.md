@@ -488,4 +488,4 @@ attempt counts, including reads the model fails.
 card, shows a tee picker when there are several tee rows, and `applyLayout` fills par and the
 chosen row's yardages (holes the card doesn't show keep what was typed). Layout photos are not
 queued offline; the golfer types par and yards as they play. The marked-card `PhotoImport`
-moves to the hole sidebar and shows only while holes are blank.
+sits under it on the details step (the start of the round) and shows only while holes are blank.
