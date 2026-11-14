@@ -143,11 +143,11 @@ describe('RoundEntry', () => {
     await user.click(button('Next'));
     expect(screen.getByLabelText('Approach yards')).toHaveValue(165);
     await user.click(button('Rough'));
-    await user.click(button('Next'));
+    expect(button('Next')).toBeDisabled();
+    await user.click(button('Missed short'));
     expect(
       screen.getByRole('heading', { name: 'Did you chip, pitch or play from a bunker?' }),
     ).toBeVisible();
-    await user.click(button('Short'));
     await user.click(button('1'));
     await user.type(screen.getByLabelText('Short-game yards'), '15');
     await user.click(button('Bunker'));
@@ -194,6 +194,25 @@ describe('RoundEntry', () => {
     await user.type(screen.getByLabelText('Yards left'), '250');
     await user.click(button('Next'));
     expect(screen.getByLabelText('Approach yards')).toHaveValue(90);
+  });
+
+  it('skips the chip question when the approach finished on the green', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<RoundEntry />, { route: '/rounds/new', path: '/rounds/new' });
+    await user.click(await screen.findByRole('button', { name: 'Start with hole 1' }));
+    await user.type(screen.getByLabelText('Yards'), '380');
+    await user.click(button('Next'));
+    await user.click(button('4 Par'));
+    await user.click(button('Fairway'));
+    await user.type(screen.getByLabelText('Yards left'), '140');
+    await user.click(button('Next'));
+    await user.click(button('On the green'));
+    expect(screen.getByRole('heading', { name: 'How many putts?' })).toBeVisible();
+    await user.click(button('2'));
+    await user.type(screen.getByLabelText('First putt'), '20');
+    await user.click(button('Next'));
+    await user.click(button('None'));
+    expect(screen.getByText('4 F 2 140 / 20')).toBeInTheDocument();
   });
 
   it('accepts the card line as a shortcut', async () => {

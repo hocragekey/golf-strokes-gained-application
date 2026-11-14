@@ -398,8 +398,30 @@ function Scorecard({ existing }: { existing?: RoundDetail }) {
   const steps = stepsFor(par);
 
   const approachSeparate = useRef(new Set<number>());
+  const [onGreen, setOnGreen] = useState<ReadonlySet<number>>(new Set());
   const update = (patch: Partial<HoleDraft>) => {
     setDrafts((prev) => prev.map((d, j) => (j === pos.hole ? { ...d, ...patch } : d)));
+  };
+  // A saved hole with no chips and no miss direction was on the green in regulation strokes.
+  const approachResult: string | null =
+    draft.missDirection ||
+    (onGreen.has(pos.hole) ||
+    (draft.score !== '' && draft.shortGameShots === '0' && draft.putts !== '')
+      ? 'green'
+      : null);
+  const pickApproachResult = (v: string) => {
+    const green = v === 'green';
+    setOnGreen((prev) => {
+      const nextSet = new Set(prev);
+      if (green) nextSet.add(pos.hole);
+      else nextSet.delete(pos.hole);
+      return nextSet;
+    });
+    update(
+      green
+        ? { missDirection: '', shortGameShots: '0', shortGameYards: '', shortGameLie: '' }
+        : { missDirection: v },
+    );
   };
   const updateLayout = (patch: Partial<LayoutDraft>) => {
     setLayout((prev) => prev.map((l, j) => (j === pos.hole ? { ...l, ...patch } : l)));
@@ -818,12 +840,26 @@ function Scorecard({ existing }: { existing?: RoundDetail }) {
               }}
             />
           </fieldset>
+          <fieldset className="field">
+            <legend>Did it finish on the green?</legend>
+            <Choices
+              options={['green', ...MISS_DIRECTIONS]}
+              selected={approachResult}
+              render={(v) => (v === 'green' ? 'On the green' : `Missed ${v}`)}
+              onPick={(v) => {
+                pickApproachResult(v);
+                if (draft.approachYards !== '') goTo(v === 'green' ? 'putts' : 'short');
+              }}
+            />
+          </fieldset>
           <div className="actions">
             <button
               type="button"
               className="primary big"
-              disabled={draft.approachYards === ''}
-              onClick={next}
+              disabled={draft.approachYards === '' || approachResult === null}
+              onClick={() => {
+                goTo(approachResult === 'green' ? 'putts' : 'short');
+              }}
             >
               Next
             </button>
@@ -838,18 +874,6 @@ function Scorecard({ existing }: { existing?: RoundDetail }) {
           title="Did you chip, pitch or play from a bunker?"
           help="Shots from within about 50 yards that didn't start on the green."
         >
-          {par !== 3 && (
-            <fieldset className="field">
-              <legend>Missed the green? (optional, pick before answering)</legend>
-              <Choices
-                options={MISS_DIRECTIONS}
-                selected={draft.missDirection || null}
-                onPick={(v) => {
-                  update({ missDirection: draft.missDirection === v ? '' : v });
-                }}
-              />
-            </fieldset>
-          )}
           <Choices
             options={['0', '1', '2', '3', '4']}
             more={10}
@@ -979,7 +1003,11 @@ function Scorecard({ existing }: { existing?: RoundDetail }) {
                     type="button"
                     className="link"
                     onClick={() => {
-                      goTo(FIELD_STEP[field] ?? 'score');
+                      goTo(
+                        field === 'missDirection' && par !== 3
+                          ? 'approach'
+                          : (FIELD_STEP[field] ?? 'score'),
+                      );
                     }}
                   >
                     Fix
