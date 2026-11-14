@@ -118,7 +118,7 @@ describe('applyLayout', () => {
     expect(layout.slice(0, 3)).toEqual([
       { par: '4', yardage: '380' },
       { par: '3', yardage: '150' },
-      { par: blank[2]?.par, yardage: blank[2]?.yardage },
+      { par: '', yardage: blank[2]?.yardage },
     ]);
   });
 

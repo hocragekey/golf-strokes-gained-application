@@ -113,8 +113,10 @@ export function applyLayout(
     layout: layout.map((l, i) => {
       const par = scan.pars[i];
       const yardage = yards[i];
+      // An unreadable par on a hole the card covers is asked for rather than left at the default 4.
+      const covered = i < holes;
       return {
-        par: par == null ? l.par : String(par),
+        par: par == null ? (covered ? '' : l.par) : String(par),
         yardage: yardage == null ? l.yardage : String(yardage),
       };
     }),
