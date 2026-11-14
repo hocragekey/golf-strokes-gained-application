@@ -314,6 +314,8 @@ function Scorecard({ existing }: { existing?: RoundDetail }) {
   // Holes filled from a photo that still need a look; each is cleared once visited.
   const [checkHoles, setCheckHoles] = useState<number[]>(() => resumed?.check ?? []);
   const [photoNote, setPhotoNote] = useState<string | null>(null);
+  /** A blank-card photo filled the setup: keep it even before the first hole is started. */
+  const [fromCard, setFromCard] = useState(false);
   const [cardLine, setCardLine] = useState('');
   const [lineError, setLineError] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
@@ -321,7 +323,8 @@ function Scorecard({ existing }: { existing?: RoundDetail }) {
   useEffect(() => {
     // Saved from the first hole on, so nothing typed is lost if the phone closes the app.
     // Once a round is on the device, later edits to its details are saved too.
-    const untouched = pos.step === 'details' && drafts.every(isBlank) && !loadInProgress();
+    const untouched =
+      pos.step === 'details' && drafts.every(isBlank) && !fromCard && !loadInProgress();
     if (existing || untouched) return;
     saveInProgress(
       {
@@ -337,7 +340,19 @@ function Scorecard({ existing }: { existing?: RoundDetail }) {
       },
       { quiet: true },
     );
-  }, [existing, courseName, tees, playedOn, notes, holeCount, layout, drafts, pos, checkHoles]);
+  }, [
+    existing,
+    courseName,
+    tees,
+    playedOn,
+    notes,
+    holeCount,
+    layout,
+    drafts,
+    pos,
+    checkHoles,
+    fromCard,
+  ]);
 
   // A queued photo read in the background lands in storage; pick it up instead of overwriting it.
   useEffect(() => {
@@ -495,6 +510,7 @@ function Scorecard({ existing }: { existing?: RoundDetail }) {
     if (teeName) setTees(teeName);
     setHoleCount(filled.holeCount);
     setLayout(filled.layout);
+    setFromCard(true);
     setPhotoNote('Par and yardage filled from your card. Check them as you play each hole.');
   };
 
