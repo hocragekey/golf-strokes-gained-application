@@ -66,10 +66,12 @@ export function applyScan(
   for (const hole of scan.holes) {
     const i = hole.number - 1;
     const current = layout[i] ?? emptyLayout();
-    if (current.yardage === '' && (hole.par !== null || hole.yardage !== null)) {
+    const parUnread = hole.par === null;
+    if (current.yardage === '' && (!parUnread || hole.yardage !== null)) {
       // The printed par is used even when the yardage couldn't be read; the marks depend on it.
+      // An unreadable par is left blank so the golfer is asked for it rather than saving a guess.
       layout[i] = {
-        par: hole.par === null ? current.par : String(hole.par),
+        par: parUnread ? '' : String(hole.par),
         yardage: hole.yardage === null ? '' : String(hole.yardage),
       };
     }
@@ -81,7 +83,7 @@ export function applyScan(
       continue;
     }
     drafts[i] = read.draft;
-    if (hole.unsure || !read.ok) check.push(hole.number);
+    if (hole.unsure || !read.ok || layout[i]?.par === '') check.push(hole.number);
   }
   const lastHole = Math.max(0, ...scan.holes.map((h) => h.number));
   return {

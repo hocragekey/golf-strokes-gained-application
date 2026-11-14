@@ -184,7 +184,7 @@ describe('cardMarks', () => {
     });
   });
 
-  it('keeps a readable yardage when no par could be read', () => {
+  it('keeps a readable yardage and asks for an unreadable par', () => {
     const { round } = applyScan(emptyRound('2026-11-07'), {
       courseName: '',
       tees: '',
@@ -201,6 +201,7 @@ describe('cardMarks', () => {
         },
       ],
     });
-    expect(round.layout[0]?.yardage).toBe('410');
+    expect(round.layout[0]).toEqual({ par: '', yardage: '410' });
+    expect(round.check).toEqual([1]);
   });
 });
