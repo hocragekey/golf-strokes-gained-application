@@ -5,6 +5,7 @@ import {
   parseHoleNotation,
   SHORT_GAME_LIES,
   TEE_RESULTS,
+  type CardLayoutResult,
   type CardScanResult,
   type RoundDetail,
 } from '@golf-sg/shared';
@@ -32,7 +33,8 @@ import {
   type RoundInProgress,
 } from '../data/inProgress';
 import { formatToPar } from '../format';
-import { applyScan } from '../scan/apply';
+import { applyLayout, applyScan } from '../scan/apply';
+import { LayoutImport } from '../scan/LayoutImport';
 import { cardScanEnabled } from '../scan/features';
 import { PhotoImport } from '../scan/PhotoImport';
 
@@ -486,6 +488,16 @@ function Scorecard({ existing }: { existing?: RoundDetail }) {
     setPos({ hole: first - 1, step: 'review' });
   };
 
+  const applyLayoutPhoto = (scan: CardLayoutResult, tee: number | null) => {
+    const filled = applyLayout(layout, scan, tee);
+    if (scan.courseName) setCourseName(scan.courseName);
+    const teeName = tee === null ? undefined : scan.tees[tee]?.name;
+    if (teeName) setTees(teeName);
+    setHoleCount(filled.holeCount);
+    setLayout(filled.layout);
+    setPhotoNote('Par and yardage filled from your card. Check them as you play each hole.');
+  };
+
   const applyLine = () => {
     const parsed = parseHoleNotation(cardLine, par);
     if (!parsed.ok) {
@@ -518,7 +530,7 @@ function Scorecard({ existing }: { existing?: RoundDetail }) {
             Start on the first tee and enter each hole as you finish it, or copy your card after the
             round. We&apos;ll ask for each hole&apos;s par and yardage as you go.
           </p>
-          {!existing && cardScanEnabled() && <PhotoImport onRead={applyPhoto} />}
+          {!existing && cardScanEnabled() && <LayoutImport onRead={applyLayoutPhoto} />}
           <div className="row">
             <label className="field grow">
               <span>Course (optional)</span>
@@ -1018,7 +1030,7 @@ function Scorecard({ existing }: { existing?: RoundDetail }) {
             </span>
           </div>
         )}
-        {photoNote && pos.step !== 'details' && (
+        {photoNote && (
           <p className="ok" role="status">
             {photoNote}
           </p>
@@ -1094,6 +1106,16 @@ function Scorecard({ existing }: { existing?: RoundDetail }) {
             </li>
           ))}
         </ol>
+        {!existing && cardScanEnabled() && played.length < holeCount && (
+          <PhotoImport
+            onRead={applyPhoto}
+            label={
+              played.length === 0
+                ? 'Marked your card? Snap it to fill the round'
+                : 'Snap your marked card to fill the blank holes'
+            }
+          />
+        )}
         {played.length > 0 && (
           <button
             type="button"

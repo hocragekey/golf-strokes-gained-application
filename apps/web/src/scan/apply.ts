@@ -1,10 +1,16 @@
-import { holeEntrySchema, parseCardMarks, type CardScanResult } from '@golf-sg/shared';
+import {
+  holeEntrySchema,
+  parseCardMarks,
+  type CardLayoutResult,
+  type CardScanResult,
+} from '@golf-sg/shared';
 import {
   draftFromEntry,
   emptyDraft,
   emptyLayout,
   isBlank,
   type HoleDraft,
+  type LayoutDraft,
 } from '../components/scorecard';
 import type { RoundInProgress } from '../data/inProgress';
 
@@ -88,5 +94,29 @@ export function applyScan(
       check: [...new Set([...(current.check ?? []), ...check])].sort((a, b) => a - b),
     },
     check,
+  };
+}
+
+/**
+ * Fills each hole's par and the chosen tee row's yardage from a blank card (FR-CARD-07), keeping
+ * whatever the card doesn't show.
+ */
+export function applyLayout(
+  layout: LayoutDraft[],
+  scan: CardLayoutResult,
+  tee: number | null,
+): { layout: LayoutDraft[]; holeCount: number } {
+  const yards = tee === null ? [] : (scan.tees[tee]?.yardages ?? []);
+  const holes = Math.max(scan.pars.length, yards.length);
+  return {
+    holeCount: holes > 9 ? 18 : 9,
+    layout: layout.map((l, i) => {
+      const par = scan.pars[i];
+      const yardage = yards[i];
+      return {
+        par: par == null ? l.par : String(par),
+        yardage: yardage == null ? l.yardage : String(yardage),
+      };
+    }),
   };
 }
