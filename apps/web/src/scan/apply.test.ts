@@ -58,6 +58,14 @@ describe('applyScan', () => {
     expect(round.drafts[1]).toMatchObject({ score: '4', putts: '1', teeResult: '' });
   });
 
+  it('flags a listed hole whose score could not be read', () => {
+    const { check } = applyScan(
+      emptyRound('2026-11-07'),
+      scan([hole({}), hole({ number: 2, score: null })]),
+    );
+    expect(check).toEqual([2]);
+  });
+
   it('never overwrites holes already entered by hand', () => {
     const current = emptyRound('2026-11-07');
     current.courseName = 'My course';

@@ -63,7 +63,11 @@ export function applyScan(
     }
     if (!isBlank(drafts[i] ?? emptyDraft())) continue;
     const read = draftFromScan(hole, Number(layout[i]?.par) || 4);
-    if (!read) continue;
+    if (!read) {
+      // Listed but no score could be read: the golfer has to fill it in.
+      check.push(hole.number);
+      continue;
+    }
     drafts[i] = read.draft;
     if (hole.unsure || !read.ok) check.push(hole.number);
   }
