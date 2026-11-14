@@ -183,4 +183,24 @@ describe('cardMarks', () => {
       holes: [{ number: 2, par: 3, yardage: 150, score: 3 }],
     });
   });
+
+  it('keeps a readable yardage when no par could be read', () => {
+    const { round } = applyScan(emptyRound('2026-11-07'), {
+      courseName: '',
+      tees: '',
+      holes: [
+        {
+          number: 1,
+          par: null,
+          yardage: 410,
+          score: 5,
+          drive: null,
+          putts: 2,
+          stats: '',
+          unsure: false,
+        },
+      ],
+    });
+    expect(round.layout[0]?.yardage).toBe('410');
+  });
 });
