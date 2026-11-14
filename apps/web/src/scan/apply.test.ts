@@ -58,6 +58,30 @@ describe('applyScan', () => {
     expect(round.drafts[1]).toMatchObject({ score: '4', putts: '1', teeResult: '' });
   });
 
+  it('uses the printed par when the yardage could not be read', () => {
+    const { round } = applyScan(
+      emptyRound('2026-11-07'),
+      scan([
+        hole({ par: 5, yardage: null, score: 6, drive: 'F', putts: 2, stats: '150 / r20 / 8' }),
+        hole({
+          number: 2,
+          par: 3,
+          yardage: null,
+          score: 4,
+          drive: null,
+          putts: 1,
+          stats: 'r20 / 8',
+        }),
+      ]),
+    );
+    expect(round.layout.slice(0, 2)).toEqual([
+      { par: '5', yardage: '' },
+      { par: '3', yardage: '' },
+    ]);
+    expect(round.drafts[0]).toMatchObject({ shortGameShots: '1' });
+    expect(round.drafts[1]).toMatchObject({ shortGameShots: '2' });
+  });
+
   it('flags a listed hole whose score could not be read', () => {
     const { check } = applyScan(
       emptyRound('2026-11-07'),

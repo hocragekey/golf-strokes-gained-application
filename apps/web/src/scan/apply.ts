@@ -58,8 +58,13 @@ export function applyScan(
   const check: number[] = [];
   for (const hole of scan.holes) {
     const i = hole.number - 1;
-    if ((layout[i] ?? emptyLayout()).yardage === '' && hole.par !== null && hole.yardage !== null) {
-      layout[i] = { par: String(hole.par), yardage: String(hole.yardage) };
+    const current = layout[i] ?? emptyLayout();
+    if (current.yardage === '' && hole.par !== null) {
+      // The printed par is used even when the yardage couldn't be read; the marks depend on it.
+      layout[i] = {
+        par: String(hole.par),
+        yardage: hole.yardage === null ? '' : String(hole.yardage),
+      };
     }
     if (!isBlank(drafts[i] ?? emptyDraft())) continue;
     const read = draftFromScan(hole, Number(layout[i]?.par) || 4);
