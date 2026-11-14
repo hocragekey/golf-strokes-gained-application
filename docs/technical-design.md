@@ -471,8 +471,9 @@ normal validation before save. Sign-out clears queued photos and notices.
 layout read uses `CARD_LAYOUT_INSTRUCTIONS` and the `record_card_layout` tool and must match
 `cardLayoutResultSchema`: `{ courseName, pars: (int|null)[], tees: { name, yardages }[] }`.
 
-**Model.** Qwen3 VL 235B A22B on Bedrock. The reader asks for any tool call (`toolChoice: any`)
-and, for models that answer in text, takes the JSON object in the reply. Either way the handler
+**Model.** Qwen3 VL 235B A22B on Bedrock (`qwen.qwen3-vl-235b-a22b`). The reader asks for any
+tool call (`toolChoice: any`); if Bedrock rejects tool use (`ValidationException`) it asks again
+for plain JSON, and for models that answer in text it takes the JSON object in the reply. Either way the handler
 validates the answer with the zod schema, so malformed output is a `502`, never saved.
 
 **Limits.** Before calling the model the handler calls `ScanQuota.take(sub)`

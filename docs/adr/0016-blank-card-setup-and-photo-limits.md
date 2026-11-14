@@ -26,6 +26,8 @@ reads cost money per call, so they need limits, and the owner chose a cheaper op
 ## Consequences
 
 - A second phone takes its own blank-card photo; past rounds still sync with their layout.
-- Limits cap cost at roughly $3 a day overall, plus an AWS billing alarm as a backstop.
-- Accuracy on handwriting is unproven for Qwen; photo reading stays off (`cardScanModelId`
-  empty) until real cards are tested, and the model can be changed without code changes.
+- Limits cap model cost at roughly $3 a day overall; an AWS billing alarm is still to add.
+- Accuracy on handwriting is unproven for Qwen. The owner chose to switch it on
+  (`cardScanModelId: qwen.qwen3-vl-235b-a22b`) and check real cards in the app; the model can be
+  changed without code changes. If Bedrock rejects tool use for the model, the reader retries
+  asking for plain JSON.
