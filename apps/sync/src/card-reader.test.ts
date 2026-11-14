@@ -1,6 +1,10 @@
 import type { ConverseCommand, ConverseCommandOutput } from '@aws-sdk/client-bedrock-runtime';
 import { describe, expect, it } from 'vitest';
-import { bedrockCardReader, CARD_SCAN_INSTRUCTIONS } from './card-reader.js';
+import {
+  bedrockCardReader,
+  CARD_LAYOUT_INSTRUCTIONS,
+  CARD_SCAN_INSTRUCTIONS,
+} from './card-reader.js';
 
 describe('bedrockCardReader', () => {
   it('sends the photo with the marking instructions and returns the tool input', async () => {
@@ -27,7 +31,50 @@ describe('bedrockCardReader', () => {
     expect(input?.messages?.[0]?.content?.[0]).toEqual({
       image: { format: 'jpeg', source: { bytes: image } },
     });
-    expect(input?.toolConfig?.toolChoice).toEqual({ tool: { name: 'record_scorecard' } });
+    expect(input?.toolConfig?.toolChoice).toEqual({ any: {} });
+  });
+
+  it('reads a blank card with the layout instructions and tool', async () => {
+    const sent: ConverseCommand[] = [];
+    const layout = {
+      courseName: 'Pebble Creek',
+      pars: [4],
+      tees: [{ name: 'Blue', yardages: [410] }],
+    };
+    const reader = bedrockCardReader('m', {
+      send: (command) => {
+        sent.push(command);
+        return Promise.resolve({
+          output: {
+            message: {
+              role: 'assistant',
+              content: [{ toolUse: { toolUseId: '1', name: 'record_card_layout', input: layout } }],
+            },
+          },
+        } as unknown as ConverseCommandOutput);
+      },
+    });
+    await expect(reader.read(new Uint8Array([1]), 'image/jpeg', 'layout')).resolves.toEqual(layout);
+    expect(sent[0]?.input.system).toEqual([{ text: CARD_LAYOUT_INSTRUCTIONS }]);
+  });
+
+  it('reads the JSON from a model that answers in text', async () => {
+    const reader = bedrockCardReader('m', {
+      send: () =>
+        Promise.resolve({
+          output: {
+            message: {
+              role: 'assistant',
+              content: [{ text: 'Here it is: {"courseName": "X", "pars": [3], "tees": []} done' }],
+            },
+          },
+        } as unknown as ConverseCommandOutput),
+    });
+    await expect(reader.read(new Uint8Array([1]), 'image/png', 'layout')).resolves.toEqual({
+      courseName: 'X',
+      pars: [3],
+      tees: [],
+    });
   });
 
   it('returns undefined when the model does not use the tool', async () => {

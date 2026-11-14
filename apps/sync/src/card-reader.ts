@@ -3,11 +3,11 @@ import {
   ConverseCommand,
   type ConverseCommandOutput,
 } from '@aws-sdk/client-bedrock-runtime';
-import type { CardScanMediaType } from '@golf-sg/shared';
+import type { CardScanKind, CardScanMediaType } from '@golf-sg/shared';
 
 /** Reads the marks off a scorecard photo; returns unvalidated output for the handler to check. */
 export interface CardReader {
-  read(image: Uint8Array, mediaType: CardScanMediaType): Promise<unknown>;
+  read(image: Uint8Array, mediaType: CardScanMediaType, kind?: CardScanKind): Promise<unknown>;
 }
 
 const TOOL = 'record_scorecard';
@@ -52,28 +52,94 @@ export const CARD_SCAN_TOOL_SCHEMA = {
   },
 };
 
+export const CARD_LAYOUT_INSTRUCTIONS = `You read the printed layout of a golf scorecard before the round.
+Return the course name, each hole's printed par in hole order (hole 1 first) in "pars", and one
+entry in "tees" for every yardage row printed on the card, named as printed (e.g. "Blue",
+"White", "Gold"), with that row's yardage for each hole in hole order. Ignore totals (Out, In,
+Total), handicap/stroke-index rows and anything handwritten. Use null for anything you cannot
+read. Never guess a number you cannot see.`;
+
+const yardageRow = {
+  type: 'array',
+  maxItems: 18,
+  items: { type: ['integer', 'null'], minimum: 50, maximum: 800 },
+};
+
+export const CARD_LAYOUT_TOOL_SCHEMA = {
+  type: 'object',
+  required: ['courseName', 'pars', 'tees'],
+  properties: {
+    courseName: { type: 'string', maxLength: 100 },
+    pars: {
+      type: 'array',
+      maxItems: 18,
+      items: { type: ['integer', 'null'], minimum: 3, maximum: 6 },
+    },
+    tees: {
+      type: 'array',
+      maxItems: 8,
+      items: {
+        type: 'object',
+        required: ['name', 'yardages'],
+        properties: { name: { type: 'string', maxLength: 40 }, yardages: yardageRow },
+      },
+    },
+  },
+};
+
+const PROMPTS = {
+  marks: {
+    system: CARD_SCAN_INSTRUCTIONS,
+    tool: TOOL,
+    description: 'Record what is written on the scorecard',
+    schema: CARD_SCAN_TOOL_SCHEMA,
+  },
+  layout: {
+    system: CARD_LAYOUT_INSTRUCTIONS,
+    tool: 'record_card_layout',
+    description: 'Record the printed course layout',
+    schema: CARD_LAYOUT_TOOL_SCHEMA,
+  },
+} as const;
+
+/** The JSON object in a text answer, for models that reply in text instead of calling the tool. */
+function jsonIn(text: string): unknown {
+  const start = text.indexOf('{');
+  const end = text.lastIndexOf('}');
+  if (start < 0 || end <= start) return undefined;
+  try {
+    return JSON.parse(text.slice(start, end + 1));
+  } catch {
+    return undefined;
+  }
+}
+
 interface Sender {
   send(command: ConverseCommand): Promise<ConverseCommandOutput>;
 }
 
-/** Amazon Bedrock vision model, forced to answer through one tool so the output is structured. */
+/**
+ * A vision model on Amazon Bedrock, asked to answer through one tool so the output is structured.
+ * Open-weight models that answer in text instead are read from the JSON in their reply.
+ */
 export function bedrockCardReader(
   modelId: string,
   client: Sender = new BedrockRuntimeClient({}),
 ): CardReader {
   return {
-    async read(image, mediaType) {
+    async read(image, mediaType, kind = 'marks') {
+      const prompt = PROMPTS[kind];
       const format = mediaType.slice('image/'.length) as 'jpeg' | 'png' | 'webp';
       const res = await client.send(
         new ConverseCommand({
           modelId,
-          system: [{ text: CARD_SCAN_INSTRUCTIONS }],
+          system: [{ text: prompt.system }],
           messages: [
             {
               role: 'user',
               content: [
                 { image: { format, source: { bytes: image } } },
-                { text: 'Read this card.' },
+                { text: `Read this card and answer by calling ${prompt.tool}.` },
               ],
             },
           ],
@@ -81,18 +147,20 @@ export function bedrockCardReader(
             tools: [
               {
                 toolSpec: {
-                  name: TOOL,
-                  description: 'Record what is written on the scorecard',
-                  inputSchema: { json: CARD_SCAN_TOOL_SCHEMA },
+                  name: prompt.tool,
+                  description: prompt.description,
+                  inputSchema: { json: prompt.schema },
                 },
               },
             ],
-            toolChoice: { tool: { name: TOOL } },
+            toolChoice: { any: {} },
           },
           inferenceConfig: { maxTokens: 4000, temperature: 0 },
         }),
       );
-      return res.output?.message?.content?.find((c) => c.toolUse?.name === TOOL)?.toolUse?.input;
+      const content = res.output?.message?.content ?? [];
+      const call = content.find((c) => c.toolUse?.name === prompt.tool)?.toolUse?.input;
+      return call ?? jsonIn(content.map((c) => c.text ?? '').join(''));
     },
   };
 }

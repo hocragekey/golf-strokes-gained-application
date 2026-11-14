@@ -7,11 +7,22 @@ export type CardScanMediaType = (typeof CARD_SCAN_MEDIA_TYPES)[number];
 /** Largest photo the reader accepts (the vision model's per-image limit). */
 export const MAX_CARD_IMAGE_BYTES = 3_750_000;
 
+/**
+ * `layout`: a blank card before tee-off, read for par and every tee row's yardages.
+ * `marks`: a card marked the two-row way after the round.
+ */
+export const CARD_SCAN_KINDS = ['layout', 'marks'] as const;
+export type CardScanKind = (typeof CARD_SCAN_KINDS)[number];
+
+/** Photo reads allowed per Google account, and in total across everyone (FR-CARD-08). */
+export const CARD_SCAN_LIMITS = { perUserPerDay: 6, perUserPerMonth: 40, allUsersPerDay: 500 };
+
 export const cardScanRequestSchema = z.object({
+  kind: z.enum(CARD_SCAN_KINDS).default('marks'),
   mediaType: z.enum(CARD_SCAN_MEDIA_TYPES),
   image: z.base64().max(Math.ceil(MAX_CARD_IMAGE_BYTES / 3) * 4),
 });
-export type CardScanRequest = z.infer<typeof cardScanRequestSchema>;
+export type CardScanRequest = z.input<typeof cardScanRequestSchema>;
 
 const nullableInt = (min: number, max: number) => z.number().int().min(min).max(max).nullable();
 
@@ -41,3 +52,14 @@ export const cardScanResultSchema = z.object({
   holes: z.array(scannedHoleSchema).min(1).max(18),
 });
 export type CardScanResult = z.infer<typeof cardScanResultSchema>;
+
+const yardages = z.array(nullableInt(50, 800)).max(18);
+
+/** A blank scorecard: the printed par of each hole and every tee row's yardages (FR-CARD-07). */
+export const cardLayoutResultSchema = z.object({
+  courseName: z.string().max(100),
+  /** Par per hole, hole 1 first; null where unreadable. */
+  pars: z.array(nullableInt(3, 6)).min(1).max(18),
+  tees: z.array(z.object({ name: z.string().min(1).max(40), yardages })).max(8),
+});
+export type CardLayoutResult = z.infer<typeof cardLayoutResultSchema>;
