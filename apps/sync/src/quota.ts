@@ -86,8 +86,10 @@ export function dynamoQuota(
               Update: {
                 TableName: tableName,
                 Key: { pk: c.pk, sk: c.sk },
-                UpdateExpression: 'ADD reads :one SET expiresAt = if_not_exists(expiresAt, :exp)',
-                ConditionExpression: 'attribute_not_exists(reads) OR reads < :limit',
+                // READS is a DynamoDB reserved word.
+                UpdateExpression: 'ADD #reads :one SET expiresAt = if_not_exists(expiresAt, :exp)',
+                ConditionExpression: 'attribute_not_exists(#reads) OR #reads < :limit',
+                ExpressionAttributeNames: { '#reads': 'reads' },
                 ExpressionAttributeValues: {
                   ':one': 1,
                   ':limit': c.limit,

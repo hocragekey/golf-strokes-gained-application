@@ -39,6 +39,7 @@ describe('dynamoQuota', () => {
       ['QUOTA#ALL', 'DAY#2026-11-14'],
     ]);
     expect(items[0]?.Update?.ExpressionAttributeValues?.[':limit']).toBe(2);
+    expect(items[0]?.Update?.ExpressionAttributeNames).toEqual({ '#reads': 'reads' });
   });
 
   it('reports which limit was hit', async () => {
