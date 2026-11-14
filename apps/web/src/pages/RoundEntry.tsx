@@ -9,7 +9,7 @@ import {
   type CardScanResult,
   type RoundDetail,
 } from '@golf-sg/shared';
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import { useRound, useSaveRound } from '../data/hooks';
 import {
@@ -397,6 +397,7 @@ function Scorecard({ existing }: { existing?: RoundDetail }) {
   const par = Number(lay.par) || 4;
   const steps = stepsFor(par);
 
+  const approachTyped = useRef(new Set<number>());
   const update = (patch: Partial<HoleDraft>) => {
     setDrafts((prev) => prev.map((d, j) => (j === pos.hole ? { ...d, ...patch } : d)));
   };
@@ -732,7 +733,14 @@ function Scorecard({ existing }: { existing?: RoundDetail }) {
             autoFocus
             value={draft.driveYardsLeft}
             onChange={(v) => {
-              update({ driveYardsLeft: v });
+              // On a par 4 the next shot is usually the approach, so keep it in step until the
+              // golfer types a different one. Holes saved before this step existed follow it too.
+              const linked =
+                par === 4 &&
+                (draft.approachYards === '' ||
+                  draft.approachYards === draft.driveYardsLeft ||
+                  (draft.driveYardsLeft === '' && !approachTyped.current.has(pos.hole)));
+              update(linked ? { driveYardsLeft: v, approachYards: v } : { driveYardsLeft: v });
             }}
           />
           <div className="actions">
@@ -740,13 +748,7 @@ function Scorecard({ existing }: { existing?: RoundDetail }) {
               type="button"
               className="primary big"
               disabled={draft.driveYardsLeft === ''}
-              onClick={() => {
-                // On a par 4 the next shot is usually the approach, so start from the same number.
-                if (par === 4 && draft.approachYards === '') {
-                  update({ approachYards: draft.driveYardsLeft });
-                }
-                next();
-              }}
+              onClick={next}
             >
               Next
             </button>
@@ -788,7 +790,11 @@ function Scorecard({ existing }: { existing?: RoundDetail }) {
       body = (
         <Question
           title="How far was your shot into the green?"
-          help="Yards to the pin for the shot onto (or at) the green, and where you hit it from."
+          help={
+            par === 4
+              ? 'Filled in from your drive. Change it only if you needed another shot first, such as a punch-out.'
+              : 'Yards to the pin for the shot onto (or at) the green, and where you hit it from.'
+          }
         >
           <NumberField
             name="Approach yards"
@@ -797,6 +803,7 @@ function Scorecard({ existing }: { existing?: RoundDetail }) {
             autoFocus
             value={draft.approachYards}
             onChange={(v) => {
+              approachTyped.current.add(pos.hole);
               update({ approachYards: v });
             }}
           />

@@ -169,6 +169,33 @@ describe('RoundEntry', () => {
     expect(await store.db.courses.count()).toBe(0);
   });
 
+  it('keeps par 4 approach yards in step with the drive until changed', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<RoundEntry />, { route: '/rounds/new', path: '/rounds/new' });
+    await user.click(await screen.findByRole('button', { name: 'Start with hole 1' }));
+    await user.type(screen.getByLabelText('Yards'), '410');
+    await user.click(button('Next'));
+    await user.click(button('5 Bogey'));
+    await user.click(button('Fairway'));
+    await user.type(screen.getByLabelText('Yards left'), '165');
+    await user.click(button('Next'));
+    expect(screen.getByLabelText('Approach yards')).toHaveValue(165);
+
+    await user.click(button('← Back'));
+    await user.clear(screen.getByLabelText('Yards left'));
+    await user.type(screen.getByLabelText('Yards left'), '170');
+    await user.click(button('Next'));
+    expect(screen.getByLabelText('Approach yards')).toHaveValue(170);
+
+    await user.clear(screen.getByLabelText('Approach yards'));
+    await user.type(screen.getByLabelText('Approach yards'), '90');
+    await user.click(button('← Back'));
+    await user.clear(screen.getByLabelText('Yards left'));
+    await user.type(screen.getByLabelText('Yards left'), '250');
+    await user.click(button('Next'));
+    expect(screen.getByLabelText('Approach yards')).toHaveValue(90);
+  });
+
   it('accepts the card line as a shortcut', async () => {
     const user = userEvent.setup();
     const store = createTestStore();
