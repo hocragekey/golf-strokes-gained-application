@@ -93,6 +93,7 @@ export function holeStrokesGained(
     score: entry.score,
     offTheTee: round2(offTheTee),
     approach: round2(approachSg),
+    approachShot: round2(approachSg - layUpSg),
     aroundTheGreen: round2(aroundTheGreen),
     putting: round2(putting),
     total: round2(E(tee) - entry.score),
