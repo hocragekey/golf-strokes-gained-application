@@ -130,34 +130,49 @@ export function bedrockCardReader(
     async read(image, mediaType, kind = 'marks') {
       const prompt = PROMPTS[kind];
       const format = mediaType.slice('image/'.length) as 'jpeg' | 'png' | 'webp';
-      const res = await client.send(
-        new ConverseCommand({
-          modelId,
-          system: [{ text: prompt.system }],
-          messages: [
-            {
-              role: 'user',
-              content: [
-                { image: { format, source: { bytes: image } } },
-                { text: `Read this card and answer by calling ${prompt.tool}.` },
-              ],
-            },
-          ],
-          toolConfig: {
-            tools: [
+      const ask = (withTool: boolean) =>
+        client.send(
+          new ConverseCommand({
+            modelId,
+            system: [{ text: prompt.system }],
+            messages: [
               {
-                toolSpec: {
-                  name: prompt.tool,
-                  description: prompt.description,
-                  inputSchema: { json: prompt.schema },
-                },
+                role: 'user',
+                content: [
+                  { image: { format, source: { bytes: image } } },
+                  {
+                    text: withTool
+                      ? `Read this card and answer by calling ${prompt.tool}.`
+                      : `Read this card. Reply with only a JSON object matching this JSON schema: ${JSON.stringify(prompt.schema)}`,
+                  },
+                ],
               },
             ],
-            toolChoice: { any: {} },
-          },
-          inferenceConfig: { maxTokens: 4000, temperature: 0 },
-        }),
-      );
+            ...(withTool && {
+              toolConfig: {
+                tools: [
+                  {
+                    toolSpec: {
+                      name: prompt.tool,
+                      description: prompt.description,
+                      inputSchema: { json: prompt.schema },
+                    },
+                  },
+                ],
+                toolChoice: { any: {} },
+              },
+            }),
+            inferenceConfig: { maxTokens: 4000, temperature: 0 },
+          }),
+        );
+      let res: ConverseCommandOutput;
+      try {
+        res = await ask(true);
+      } catch (err) {
+        // Some models on Bedrock reject tool use or tool choice; ask for plain JSON instead.
+        if (!(err instanceof Error) || err.name !== 'ValidationException') throw err;
+        res = await ask(false);
+      }
       const content = res.output?.message?.content ?? [];
       const call = content.find((c) => c.toolUse?.name === prompt.tool)?.toolUse?.input;
       return call ?? jsonIn(content.map((c) => c.text ?? '').join(''));

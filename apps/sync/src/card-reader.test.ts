@@ -77,6 +77,34 @@ describe('bedrockCardReader', () => {
     });
   });
 
+  it('asks for plain JSON when the model rejects tool use', async () => {
+    const sent: ConverseCommand[] = [];
+    const reader = bedrockCardReader('m', {
+      send: (command) => {
+        sent.push(command);
+        if (sent.length === 1) {
+          return Promise.reject(
+            Object.assign(new Error('tools unsupported'), { name: 'ValidationException' }),
+          );
+        }
+        return Promise.resolve({
+          output: {
+            message: {
+              role: 'assistant',
+              content: [{ text: '{"courseName": "X", "pars": [4], "tees": []}' }],
+            },
+          },
+        } as unknown as ConverseCommandOutput);
+      },
+    });
+    await expect(reader.read(new Uint8Array([1]), 'image/png', 'layout')).resolves.toEqual({
+      courseName: 'X',
+      pars: [4],
+      tees: [],
+    });
+    expect(sent[1]?.input.toolConfig).toBeUndefined();
+  });
+
   it('returns undefined when the model does not use the tool', async () => {
     const reader = bedrockCardReader('m', {
       send: () =>
