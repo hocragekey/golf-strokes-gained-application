@@ -131,7 +131,9 @@ export function computeStats(
       }
       const approachYards = hole.par === 3 ? hole.yardage : entry.approachYards;
       if (approachYards !== null) {
-        approach[APPROACH_BANDS.indexOf(bandFor(APPROACH_BANDS, approachYards))]?.add(sg.approach);
+        approach[APPROACH_BANDS.indexOf(bandFor(APPROACH_BANDS, approachYards))]?.add(
+          sg.approachShot ?? sg.approach,
+        );
       }
       if (entry.missDirection) misses[entry.missDirection]++;
       if (entry.shortGameShots > 0 && entry.shortGameLie) {

@@ -120,6 +120,8 @@ export const sgCategoriesSchema = z.object({
 export type SgCategories = z.infer<typeof sgCategoriesSchema>;
 
 export const holeSgSchema = sgCategoriesSchema.extend({
+  /** The shot into the green alone, without lay-ups; `approach` includes them. */
+  approachShot: z.number().optional(),
   holeNumber: z.number().int(),
   par: z.number().int(),
   score: z.number().int(),

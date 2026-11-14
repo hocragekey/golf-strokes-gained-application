@@ -63,6 +63,7 @@ describe('holeStrokesGained', () => {
     );
     expect(sg.offTheTee).toBeCloseTo(E(520, 'tee') - E(250, 'fairway') - 1, 1);
     expect(sg.approach).toBeCloseTo(E(250, 'fairway') - E(10, 'green') - 2, 1);
+    expect(sg.approachShot).toBeCloseTo(E(100, 'fairway') - E(10, 'green') - 1, 1);
     expect(sg.offTheTee + sg.approach + sg.aroundTheGreen + sg.putting).toBeCloseTo(sg.total, 1);
   });
 

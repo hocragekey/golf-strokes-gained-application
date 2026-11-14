@@ -30,6 +30,16 @@ const good3: HoleDraft = {
   putts: '2',
 };
 
+describe('drafts saved before drive yards existed', () => {
+  it('converts an old draft and an old entry without a drive distance', () => {
+    const { driveYardsLeft: _old, ...oldDraft } = good4;
+    expect(validateRow(oldDraft as HoleDraft, par4).errors).toEqual({});
+    const entry = validateRow(good4, par4).entry!;
+    const { driveYardsLeft: _none, ...oldEntry } = entry;
+    expect(draftFromEntry(oldEntry as typeof entry).driveYardsLeft).toBe('');
+  });
+});
+
 describe('validateRow', () => {
   it('converts a valid par 4 row', () => {
     const { entry, errors } = validateRow(good4, par4);

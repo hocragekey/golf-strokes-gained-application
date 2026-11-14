@@ -44,7 +44,7 @@ export function draftFromEntry(entry: HoleEntry): HoleDraft {
   return {
     score: str(entry.score),
     teeResult: str(entry.teeResult),
-    driveYardsLeft: str(entry.driveYardsLeft),
+    driveYardsLeft: str(entry.driveYardsLeft ?? null),
     approachYards: str(entry.approachYards),
     approachLie: entry.approachLie,
     missDirection: str(entry.missDirection),
@@ -57,7 +57,9 @@ export function draftFromEntry(entry: HoleEntry): HoleDraft {
   };
 }
 
-const num = (v: string): number | null => (v.trim() === '' ? null : Number(v));
+// Drafts saved before a field existed don't have it at all.
+const num = (v: string | undefined): number | null =>
+  v === undefined || v.trim() === '' ? null : Number(v);
 const opt = (v: string): string | null => (v === '' ? null : v);
 
 export const isBlank = (d: HoleDraft): boolean => d.score.trim() === '';
