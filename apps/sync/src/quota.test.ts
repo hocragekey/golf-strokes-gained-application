@@ -42,6 +42,22 @@ describe('dynamoQuota', () => {
     expect(items[0]?.Update?.ExpressionAttributeNames).toEqual({ '#reads': 'reads' });
   });
 
+  it('retries when another read updates the same counter at the same time', async () => {
+    const conflict = new TransactionCanceledException({
+      message: 'cancelled',
+      $metadata: {},
+      CancellationReasons: [{ Code: 'None' }, { Code: 'None' }, { Code: 'TransactionConflict' }],
+    });
+    let calls = 0;
+    const q = dynamoQuota(
+      'table',
+      { send: () => (++calls === 1 ? Promise.reject(conflict) : Promise.resolve({})) },
+      limits,
+    );
+    expect(await q.take('sub-1', day1)).toBe('ok');
+    expect(calls).toBe(2);
+  });
+
   it('reports which limit was hit', async () => {
     const cancelled = new TransactionCanceledException({
       message: 'cancelled',

@@ -79,33 +79,39 @@ export function dynamoQuota(
     async take(userId, now = new Date()) {
       const all = counters(userId, now, limits);
       const epoch = Math.floor(now.getTime() / 1000);
-      try {
-        await client.send(
-          new TransactWriteCommand({
-            TransactItems: all.map((c) => ({
-              Update: {
-                TableName: tableName,
-                Key: { pk: c.pk, sk: c.sk },
-                // READS is a DynamoDB reserved word.
-                UpdateExpression: 'ADD #reads :one SET expiresAt = if_not_exists(expiresAt, :exp)',
-                ConditionExpression: 'attribute_not_exists(#reads) OR #reads < :limit',
-                ExpressionAttributeNames: { '#reads': 'reads' },
-                ExpressionAttributeValues: {
-                  ':one': 1,
-                  ':limit': c.limit,
-                  ':exp': epoch + c.keepFor,
+      // Every read bumps the shared all-golfers counter, so simultaneous reads can conflict.
+      for (let attempt = 1; ; attempt++) {
+        try {
+          await client.send(
+            new TransactWriteCommand({
+              TransactItems: all.map((c) => ({
+                Update: {
+                  TableName: tableName,
+                  Key: { pk: c.pk, sk: c.sk },
+                  // READS is a DynamoDB reserved word.
+                  UpdateExpression:
+                    'ADD #reads :one SET expiresAt = if_not_exists(expiresAt, :exp)',
+                  ConditionExpression: 'attribute_not_exists(#reads) OR #reads < :limit',
+                  ExpressionAttributeNames: { '#reads': 'reads' },
+                  ExpressionAttributeValues: {
+                    ':one': 1,
+                    ':limit': c.limit,
+                    ':exp': epoch + c.keepFor,
+                  },
                 },
-              },
-            })),
-          }),
-        );
-        return 'ok';
-      } catch (err) {
-        if (!(err instanceof TransactionCanceledException)) throw err;
-        const reasons = err.CancellationReasons ?? [];
-        const over = all.find((_, i) => reasons[i]?.Code === 'ConditionalCheckFailed');
-        if (!over) throw err;
-        return over.result;
+              })),
+            }),
+          );
+          return 'ok';
+        } catch (err) {
+          if (!(err instanceof TransactionCanceledException)) throw err;
+          const reasons = err.CancellationReasons ?? [];
+          const over = all.find((_, i) => reasons[i]?.Code === 'ConditionalCheckFailed');
+          if (over) return over.result;
+          const conflict = reasons.some((r) => r.Code === 'TransactionConflict');
+          if (!conflict || attempt >= 4) throw err;
+          await new Promise((resolve) => setTimeout(resolve, 25 * attempt * Math.random()));
+        }
       }
     },
   };
