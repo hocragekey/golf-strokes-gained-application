@@ -405,8 +405,8 @@ function Scorecard({ existing }: { existing?: RoundDetail }) {
   // A saved hole with no chips and no miss direction was on the green in regulation strokes.
   const approachResult: string | null =
     draft.missDirection ||
-    (onGreen.has(pos.hole) ||
-    (draft.score !== '' && draft.shortGameShots === '0' && draft.putts !== '')
+    (draft.shortGameShots === '0' &&
+    (onGreen.has(pos.hole) || (draft.score !== '' && draft.putts !== ''))
       ? 'green'
       : null);
   const pickApproachResult = (v: string) => {
@@ -654,6 +654,8 @@ function Scorecard({ existing }: { existing?: RoundDetail }) {
                   setCheckHoles([]);
                   setPhotoNote(null);
                   setFromCard(false);
+                  setOnGreen(new Set());
+                  approachSeparate.current.clear();
                   setDrafts(Array.from({ length: 18 }, emptyDraft));
                   setLayout(Array.from({ length: 18 }, emptyLayout));
                   setCourseName('');
