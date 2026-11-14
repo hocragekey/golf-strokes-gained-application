@@ -1,5 +1,7 @@
 import {
+  cardLayoutResultSchema,
   cardScanResultSchema,
+  type CardLayoutResult,
   pullResponseSchema,
   type CardScanRequest,
   type CardScanResult,
@@ -24,6 +26,8 @@ export interface SyncApi {
   pull(since: string | undefined): Promise<PullResponse>;
   deleteAccount(): Promise<void>;
   scanCard(scan: CardScanRequest): Promise<CardScanResult>;
+  /** Reads par and every tee row's yardages off a blank card (FR-CARD-07). */
+  readLayout(scan: CardScanRequest): Promise<CardLayoutResult>;
 }
 
 const SCAN_REJECTED: Record<number, string> = {
@@ -49,6 +53,13 @@ export function httpSyncApi(
       },
     });
     if (res.status === 401 || res.status === 403) throw new AuthRequiredError();
+    if (path === '/card-scan' && res.status === 429) {
+      // Over a photo limit (FR-CARD-08): the server says which one.
+      const body = (await res.json().catch(() => ({}))) as { error?: unknown };
+      throw new ScanRejectedError(
+        typeof body.error === 'string' ? body.error : "You've used your card photos for now.",
+      );
+    }
     const rejected = path === '/card-scan' ? SCAN_REJECTED[res.status] : undefined;
     if (rejected) throw new ScanRejectedError(rejected);
     if (!res.ok) throw new Error(`Sync failed (${String(res.status)})`);
@@ -69,6 +80,13 @@ export function httpSyncApi(
     scanCard: async (scan) =>
       cardScanResultSchema.parse(
         await call('/card-scan', { method: 'POST', body: JSON.stringify(scan) }),
+      ),
+    readLayout: async (scan) =>
+      cardLayoutResultSchema.parse(
+        await call('/card-scan', {
+          method: 'POST',
+          body: JSON.stringify({ ...scan, kind: 'layout' }),
+        }),
       ),
   };
 }

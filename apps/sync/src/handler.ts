@@ -1,5 +1,6 @@
 import {
   cardScanRequestSchema,
+  cardLayoutResultSchema,
   cardScanResultSchema,
   changeProblem,
   MAX_CARD_IMAGE_BYTES,
@@ -7,6 +8,7 @@ import {
   type PushResponse,
 } from '@golf-sg/shared';
 import type { CardReader } from './card-reader.js';
+import type { QuotaResult, ScanQuota } from './quota.js';
 import { decodeCursor, type SyncRepo } from './repo.js';
 
 export interface SyncRequest {
@@ -39,7 +41,15 @@ function parseJson(body: string | undefined): unknown {
 export interface Services {
   /** Scorecard photo reader; absent until card reading is switched on (FR-CARD-06). */
   cardReader?: CardReader;
+  /** Photo-read limits (FR-CARD-08); reads are unlimited without it, e.g. in local runs. */
+  quota?: ScanQuota;
 }
+
+const OVER_LIMIT: Record<Exclude<QuotaResult, 'ok'>, string> = {
+  'user-day': "You've used today's card photos. Enter this one by hand, or try again tomorrow.",
+  'user-month': "You've used this month's card photos. Enter this one by hand.",
+  'all-day': 'Card photos are busy today. Enter this one by hand, or try again tomorrow.',
+};
 
 /** Routes one authenticated request. Pure apart from its services, so it is easy to test. */
 export async function handle(
@@ -76,10 +86,15 @@ export async function handle(
       if (!parsed.success) return error(400, 'Send a JPEG, PNG or WebP photo under 3.75 MB');
       const image = Buffer.from(parsed.data.image, 'base64');
       if (image.byteLength > MAX_CARD_IMAGE_BYTES) return error(413, 'Photo is too large');
+      const quota = (await services.quota?.take(req.userId)) ?? 'ok';
+      if (quota !== 'ok') return error(429, OVER_LIMIT[quota]);
+      const { kind, mediaType } = parsed.data;
       // The photo is only passed through to the reader; it is never stored or logged.
-      const result = cardScanResultSchema.safeParse(
-        await services.cardReader.read(image, parsed.data.mediaType),
-      );
+      const answer = await services.cardReader.read(image, mediaType, kind);
+      const result =
+        kind === 'layout'
+          ? cardLayoutResultSchema.safeParse(answer)
+          : cardScanResultSchema.safeParse(answer);
       if (!result.success) return error(502, 'Could not read the scorecard');
       return { status: 200, body: result.data };
     }

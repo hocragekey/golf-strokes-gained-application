@@ -49,6 +49,10 @@ Resources:
         PointInTimeRecoveryEnabled: true
       SSESpecification:
         SSEEnabled: true
+      # Photo-read counters (QUOTA#...) carry expiresAt; synced rounds never do.
+      TimeToLiveSpecification:
+        AttributeName: expiresAt
+        Enabled: true
       AttributeDefinitions:
         - AttributeName: pk
           AttributeType: S
@@ -118,6 +122,7 @@ Resources:
                 Effect: Allow
                 Action:
                   - dynamodb:PutItem
+                  - dynamodb:UpdateItem
                   - dynamodb:Query
                   - dynamodb:BatchWriteItem
                 Resource:

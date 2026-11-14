@@ -5,6 +5,7 @@ import {
   parseHoleNotation,
   SHORT_GAME_LIES,
   TEE_RESULTS,
+  type CardLayoutResult,
   type CardScanResult,
   type RoundDetail,
 } from '@golf-sg/shared';
@@ -32,7 +33,8 @@ import {
   type RoundInProgress,
 } from '../data/inProgress';
 import { formatToPar } from '../format';
-import { applyScan } from '../scan/apply';
+import { applyLayout, applyScan } from '../scan/apply';
+import { LayoutImport } from '../scan/LayoutImport';
 import { cardScanEnabled } from '../scan/features';
 import { PhotoImport } from '../scan/PhotoImport';
 
@@ -312,6 +314,8 @@ function Scorecard({ existing }: { existing?: RoundDetail }) {
   // Holes filled from a photo that still need a look; each is cleared once visited.
   const [checkHoles, setCheckHoles] = useState<number[]>(() => resumed?.check ?? []);
   const [photoNote, setPhotoNote] = useState<string | null>(null);
+  /** A blank-card photo filled the setup: keep it even before the first hole is started. */
+  const [fromCard, setFromCard] = useState(false);
   const [cardLine, setCardLine] = useState('');
   const [lineError, setLineError] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
@@ -319,7 +323,8 @@ function Scorecard({ existing }: { existing?: RoundDetail }) {
   useEffect(() => {
     // Saved from the first hole on, so nothing typed is lost if the phone closes the app.
     // Once a round is on the device, later edits to its details are saved too.
-    const untouched = pos.step === 'details' && drafts.every(isBlank) && !loadInProgress();
+    const untouched =
+      pos.step === 'details' && drafts.every(isBlank) && !fromCard && !loadInProgress();
     if (existing || untouched) return;
     saveInProgress(
       {
@@ -335,7 +340,19 @@ function Scorecard({ existing }: { existing?: RoundDetail }) {
       },
       { quiet: true },
     );
-  }, [existing, courseName, tees, playedOn, notes, holeCount, layout, drafts, pos, checkHoles]);
+  }, [
+    existing,
+    courseName,
+    tees,
+    playedOn,
+    notes,
+    holeCount,
+    layout,
+    drafts,
+    pos,
+    checkHoles,
+    fromCard,
+  ]);
 
   // A queued photo read in the background lands in storage; pick it up instead of overwriting it.
   useEffect(() => {
@@ -486,6 +503,17 @@ function Scorecard({ existing }: { existing?: RoundDetail }) {
     setPos({ hole: first - 1, step: 'review' });
   };
 
+  const applyLayoutPhoto = (scan: CardLayoutResult, tee: number | null) => {
+    const filled = applyLayout(layout, scan, tee);
+    if (scan.courseName) setCourseName(scan.courseName);
+    const teeName = tee === null ? undefined : scan.tees[tee]?.name;
+    if (teeName) setTees(teeName);
+    setHoleCount(filled.holeCount);
+    setLayout(filled.layout);
+    setFromCard(true);
+    setPhotoNote('Par and yardage filled from your card. Check them as you play each hole.');
+  };
+
   const applyLine = () => {
     const parsed = parseHoleNotation(cardLine, par);
     if (!parsed.ok) {
@@ -518,7 +546,7 @@ function Scorecard({ existing }: { existing?: RoundDetail }) {
             Start on the first tee and enter each hole as you finish it, or copy your card after the
             round. We&apos;ll ask for each hole&apos;s par and yardage as you go.
           </p>
-          {!existing && cardScanEnabled() && <PhotoImport onRead={applyPhoto} />}
+          {!existing && cardScanEnabled() && <LayoutImport onRead={applyLayoutPhoto} />}
           <div className="row">
             <label className="field grow">
               <span>Course (optional)</span>
@@ -592,6 +620,7 @@ function Scorecard({ existing }: { existing?: RoundDetail }) {
                   clearInProgress();
                   setCheckHoles([]);
                   setPhotoNote(null);
+                  setFromCard(false);
                   setDrafts(Array.from({ length: 18 }, emptyDraft));
                   setLayout(Array.from({ length: 18 }, emptyLayout));
                   setCourseName('');
@@ -1018,7 +1047,7 @@ function Scorecard({ existing }: { existing?: RoundDetail }) {
             </span>
           </div>
         )}
-        {photoNote && pos.step !== 'details' && (
+        {photoNote && (
           <p className="ok" role="status">
             {photoNote}
           </p>
@@ -1094,6 +1123,16 @@ function Scorecard({ existing }: { existing?: RoundDetail }) {
             </li>
           ))}
         </ol>
+        {!existing && cardScanEnabled() && played.length < holeCount && (
+          <PhotoImport
+            onRead={applyPhoto}
+            label={
+              played.length === 0
+                ? 'Marked your card? Snap it to fill the round'
+                : 'Snap your marked card to fill the blank holes'
+            }
+          />
+        )}
         {played.length > 0 && (
           <button
             type="button"

@@ -1,7 +1,7 @@
 import type { CardScanResult } from '@golf-sg/shared';
 import { describe, expect, it } from 'vitest';
-import { emptyDraft } from '../components/scorecard';
-import { applyScan, emptyRound } from './apply';
+import { emptyDraft, emptyLayout } from '../components/scorecard';
+import { applyLayout, applyScan, emptyRound } from './apply';
 
 const hole = (over: Partial<CardScanResult['holes'][number]>) => ({
   number: 1,
@@ -98,5 +98,33 @@ describe('applyScan', () => {
     expect(round.drafts[0]?.score).toBe('7');
     expect(round.courseName).toBe('My course');
     expect(round.layout[0]).toEqual({ par: '4', yardage: '410' });
+  });
+});
+
+describe('applyLayout', () => {
+  const scan = {
+    courseName: 'Pebble Creek',
+    pars: [4, 3, null, 5, 4, 4, 3, 4, 5, 4],
+    tees: [
+      { name: 'Blue', yardages: [410, 180, 390, 520] },
+      { name: 'White', yardages: [380, 150] },
+    ],
+  };
+  const blank = Array.from({ length: 18 }, () => emptyLayout());
+
+  it('fills par and the chosen tee row, keeping holes the card does not show', () => {
+    const { layout, holeCount } = applyLayout(blank, scan, 1);
+    expect(holeCount).toBe(18);
+    expect(layout.slice(0, 3)).toEqual([
+      { par: '4', yardage: '380' },
+      { par: '3', yardage: '150' },
+      { par: '', yardage: blank[2]?.yardage },
+    ]);
+  });
+
+  it('fills par only when no tee row was read', () => {
+    const { layout, holeCount } = applyLayout(blank, { ...scan, pars: [4, 3], tees: [] }, null);
+    expect(holeCount).toBe(9);
+    expect(layout[0]).toEqual({ par: '4', yardage: blank[0]?.yardage });
   });
 });

@@ -10,7 +10,7 @@ import {
   useState,
   type ReactNode,
 } from 'react';
-import type { CardScanRequest, CardScanResult } from '@golf-sg/shared';
+import type { CardLayoutResult, CardScanRequest, CardScanResult } from '@golf-sg/shared';
 import type { GolfDb } from '../data/db';
 import { clearInProgress } from '../data/inProgress';
 import { cardScanEnabled } from '../scan/features';
@@ -38,6 +38,8 @@ export interface Account {
   deleteAccount: () => Promise<void>;
   /** Reads a scorecard photo now (needs signal and sign-in). */
   scanCard: (scan: CardScanRequest) => Promise<CardScanResult>;
+  /** Reads par and tee yardages off a blank card now (needs signal and sign-in). */
+  readLayout: (scan: CardScanRequest) => Promise<CardLayoutResult>;
   /** Keeps a photo on the device and reads it once there is signal. */
   queueScan: (scan: CardScanRequest) => Promise<void>;
 }
@@ -53,6 +55,7 @@ const disabled: Account = {
   signOut: noop,
   deleteAccount: noop,
   scanCard: signInFirst,
+  readLayout: signInFirst,
   queueScan: signInFirst,
 };
 
@@ -229,6 +232,7 @@ export function AccountProvider({
   }, [profile, db, api]);
 
   const scanCard = useCallback((scan: CardScanRequest) => api.scanCard(scan), [api]);
+  const readLayout = useCallback((scan: CardScanRequest) => api.readLayout(scan), [api]);
   const queueScan = useCallback((scan: CardScanRequest) => enqueueScan(db, scan), [db]);
 
   const signIn = useCallback(
@@ -292,10 +296,22 @@ export function AccountProvider({
             signOut,
             deleteAccount,
             scanCard,
+            readLayout,
             queueScan,
           }
         : disabled,
-    [client, profile, status, renderButton, signIn, signOut, deleteAccount, scanCard, queueScan],
+    [
+      client,
+      profile,
+      status,
+      renderButton,
+      signIn,
+      signOut,
+      deleteAccount,
+      scanCard,
+      readLayout,
+      queueScan,
+    ],
   );
   return <AccountContext value={value}>{children}</AccountContext>;
 }

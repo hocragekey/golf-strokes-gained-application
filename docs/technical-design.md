@@ -464,3 +464,27 @@ fills blank holes only, takes par and yardage from the photo where missing, pars
 `parseCardMarks` and records `check` holes (unsure or unparsable) in the round in progress. Entry
 opens at the first check hole's review, shows check holes as errors until visited, and keeps the
 normal validation before save. Sign-out clears queued photos and notices.
+
+### 13.3 Blank-card setup and photo limits (FR-CARD-07, FR-CARD-08; ADR 0016)
+
+**Request kinds.** `cardScanRequestSchema` takes `kind`: `marks` (default, §13.2) or `layout`. A
+layout read uses `CARD_LAYOUT_INSTRUCTIONS` and the `record_card_layout` tool and must match
+`cardLayoutResultSchema`: `{ courseName, pars: (int|null)[], tees: { name, yardages }[] }`.
+
+**Model.** Qwen3 VL 235B A22B on Bedrock. The reader asks for any tool call (`toolChoice: any`)
+and, for models that answer in text, takes the JSON object in the reply. Either way the handler
+validates the answer with the zod schema, so malformed output is a `502`, never saved.
+
+**Limits.** Before calling the model the handler calls `ScanQuota.take(sub)`
+(`apps/sync/src/quota.ts`). `dynamoQuota` increments three counters in the API table in one
+`TransactWriteItems`, each conditioned on `reads < limit`: `QUOTA#<sub>/DAY#yyyy-mm-dd`,
+`QUOTA#<sub>/MONTH#yyyy-mm` and `QUOTA#ALL/DAY#yyyy-mm-dd`. A cancelled transaction names the
+counter that was full, returned as `429` with a message. Counters carry `expiresAt` and the table
+has TTL on it; account deletion leaves them, so deleting an account does not reset a limit. Every
+attempt counts, including reads the model fails.
+
+**Client.** `scan/LayoutImport.tsx` replaces the photo button on the details step: it reads the
+card, shows a tee picker when there are several tee rows, and `applyLayout` fills par and the
+chosen row's yardages (holes the card doesn't show keep what was typed). Layout photos are not
+queued offline; the golfer types par and yards as they play. The marked-card `PhotoImport`
+moves to the hole sidebar and shows only while holes are blank.

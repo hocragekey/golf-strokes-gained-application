@@ -1,6 +1,7 @@
 import { tombstone, type PullResponse, type PushResponse } from '@golf-sg/shared';
 import { describe, expect, it } from 'vitest';
 import { handle, type SyncRequest } from './handler.js';
+import { memoryQuota } from './quota.js';
 import { handler, type HttpApiEvent } from './lambda.js';
 import { MemoryRepo } from './memory-repo.js';
 import { change, round, ROUND_ID, tickingClock } from './test/fixtures.js';
@@ -142,6 +143,41 @@ describe('card scan route', () => {
     expect(res).toEqual({ status: 200, body: result });
     expect(Buffer.from(seen[0]?.[0] ?? []).toString()).toBe('fake jpeg bytes');
     expect(seen[0]?.[1]).toBe('image/jpeg');
+  });
+
+  it('reads a blank card layout', async () => {
+    const layout = {
+      courseName: 'Pebble Creek',
+      pars: [4, 3],
+      tees: [{ name: 'Blue', yardages: [410, 170] }],
+    };
+    const kinds: (string | undefined)[] = [];
+    const res = await handle(
+      scan({ kind: 'layout', mediaType: 'image/jpeg', image: photo }),
+      new MemoryRepo(),
+      {
+        cardReader: {
+          read: (_image, _type, kind) => {
+            kinds.push(kind);
+            return Promise.resolve(layout);
+          },
+        },
+      },
+    );
+    expect(res).toEqual({ status: 200, body: layout });
+    expect(kinds).toEqual(['layout']);
+  });
+
+  it('stops reading photos once a golfer reaches the daily limit', async () => {
+    const services = {
+      cardReader: { read: () => Promise.resolve(result) },
+      quota: memoryQuota({ perUserPerDay: 1, perUserPerMonth: 5, allUsersPerDay: 5 }),
+    };
+    const body = { mediaType: 'image/jpeg', image: photo };
+    expect((await handle(scan(body), new MemoryRepo(), services)).status).toBe(200);
+    const over = await handle(scan(body), new MemoryRepo(), services);
+    expect(over.status).toBe(429);
+    expect(over.body).toEqual({ error: expect.stringContaining('today') as unknown });
   });
 
   it('rejects bad requests and unreadable answers', async () => {

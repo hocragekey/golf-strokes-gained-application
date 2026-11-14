@@ -6,7 +6,13 @@ import { AuthRequiredError, ScanRejectedError } from '../sync/api';
 import { preparePhoto } from './image';
 
 /** Fills a new round from a photo of a card marked the two-row way (FR-CARD-06). */
-export function PhotoImport({ onRead }: { onRead: (scan: CardScanResult) => void }) {
+export function PhotoImport({
+  onRead,
+  label = 'Fill from a photo of my card',
+}: {
+  onRead: (scan: CardScanResult) => void;
+  label?: string;
+}) {
   const account = useAccount();
   const navigate = useNavigate();
   const [busy, setBusy] = useState(false);
@@ -44,7 +50,7 @@ export function PhotoImport({ onRead }: { onRead: (scan: CardScanResult) => void
   return (
     <div className="photo-import">
       <label className={`button ghost${busy ? ' disabled' : ''}`}>
-        {busy ? 'Reading your card…' : 'Fill from a photo of my card'}
+        {busy ? 'Reading your card…' : label}
         <input
           type="file"
           accept="image/*"
