@@ -543,11 +543,15 @@ function Scorecard({ existing }: { existing?: RoundDetail }) {
       applyLayoutPhoto(card, tee);
       return;
     }
-    // Holes still to play get the card's par and yardage too; entered holes keep theirs.
+    // Holes still to play get the card's par and yardage too; entered and marked holes keep
+    // theirs, so applyScan takes the marked holes' own par and yardage.
     const filled = applyLayout(layout, card, tee).layout;
+    const marked = new Set(marks.holes.map((h) => h.number - 1));
     applyPhoto(
       marks,
-      layout.map((l, i) => (isBlank(drafts[i] ?? emptyDraft()) ? (filled[i] ?? l) : l)),
+      layout.map((l, i) =>
+        !marked.has(i) && isBlank(drafts[i] ?? emptyDraft()) ? (filled[i] ?? l) : l,
+      ),
     );
   };
 
