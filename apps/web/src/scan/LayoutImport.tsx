@@ -78,7 +78,7 @@ export function LayoutImport({
 
   return (
     <div className="photo-import">
-      <label className={`button ghost${busy ? ' disabled' : ''}`}>
+      <label className={`button secondary${busy ? ' disabled' : ''}`}>
         {busy ? 'Reading the card…' : 'Snap the scorecard to fill par and yards'}
         <input
           type="file"

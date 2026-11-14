@@ -49,7 +49,7 @@ export function PhotoImport({
 
   return (
     <div className="photo-import">
-      <label className={`button ghost${busy ? ' disabled' : ''}`}>
+      <label className={`button secondary${busy ? ' disabled' : ''}`}>
         {busy ? 'Reading your card…' : label}
         <input
           type="file"
