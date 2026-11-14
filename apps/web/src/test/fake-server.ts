@@ -36,7 +36,7 @@ export function fakeServer() {
       const next = scans.shift();
       return next ? Promise.resolve(next) : Promise.reject(new Error('No signal'));
     },
-    readLayout: () => Promise.reject(new Error('No signal')),
+    readCard: () => Promise.reject(new Error('No signal')),
   };
   return { api, items, scans };
 }

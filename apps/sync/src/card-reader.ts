@@ -12,8 +12,7 @@ export interface CardReader {
 
 const TOOL = 'record_scorecard';
 
-export const CARD_SCAN_INSTRUCTIONS = `You read golf scorecards that the golfer marked like this:
-- The golfer's own row: the score in the middle of each hole's box. Top-left corner (par 4 and 5
+const MARKING = `- The golfer's own row: the score in the middle of each hole's box. Top-left corner (par 4 and 5
   only): a drive arrow: up = fairway (F), left arrow = L, right arrow = R, down = short (S), one
   cross = penalty drop (X), two crosses = out of bounds re-tee (XX). Bottom-right corner: a small number = putts. Circles or squares around a score
   are birdie/bogey decorations: ignore them. A dot on one side of the box is a missed-green side:
@@ -21,7 +20,10 @@ export const CARD_SCAN_INSTRUCTIONS = `You read golf scorecards that the golfer 
 - The row underneath (spare row): "[yards left after drive /] approach yards / chip / first putt
   feet", e.g. "175 / s15 / 8", "140 / 30", "190 / r25", on a par 5 "250 / 110 / 25" or, on a par
   3, "s10 / 5". Copy it exactly as written, with " / "
-  between items and lowercase lie letters.
+  between items and lowercase lie letters.`;
+
+export const CARD_SCAN_INSTRUCTIONS = `You read golf scorecards that the golfer marked like this:
+${MARKING}
 Also read the printed course name, the tees of the yardage row the golfer most likely played
 (say which in "tees"), and each hole's printed par and yardage.
 Return every hole the golfer wrote a score for, in order. Use null for anything blank. Set
@@ -87,6 +89,28 @@ export const CARD_LAYOUT_TOOL_SCHEMA = {
   },
 };
 
+export const CARD_READ_INSTRUCTIONS = `You read a photo of a golf scorecard. It may be blank (before the round) or
+marked by the golfer (after the round).
+Printed layout: return the course name, each hole's printed par in hole order (hole 1 first) in
+"pars", and one entry in "tees" for every yardage row printed on the card, named as printed (e.g.
+"Blue", "White", "Gold"), with that row's yardage for each hole in hole order. Ignore totals (Out,
+In, Total) and handicap/stroke-index rows.
+Golfer's marks: if the golfer wrote scores, return in "holes" every hole they wrote a score for, in
+order, with that hole's printed par and the yardage of the row they most likely played. They mark
+the card like this:
+${MARKING}
+Set "unsure" on a hole when any of its marks is hard to read. If nothing is handwritten, return an
+empty "holes" list. Use null for anything you cannot read. Never guess a number you cannot see.`;
+
+export const CARD_READ_TOOL_SCHEMA = {
+  type: 'object',
+  required: ['courseName', 'pars', 'tees', 'holes'],
+  properties: {
+    ...CARD_LAYOUT_TOOL_SCHEMA.properties,
+    holes: { type: 'array', maxItems: 18, items: hole },
+  },
+};
+
 const PROMPTS = {
   marks: {
     system: CARD_SCAN_INSTRUCTIONS,
@@ -99,6 +123,12 @@ const PROMPTS = {
     tool: 'record_card_layout',
     description: 'Record the printed course layout',
     schema: CARD_LAYOUT_TOOL_SCHEMA,
+  },
+  card: {
+    system: CARD_READ_INSTRUCTIONS,
+    tool: 'record_card',
+    description: 'Record the printed course layout and any handwritten marks',
+    schema: CARD_READ_TOOL_SCHEMA,
   },
 } as const;
 

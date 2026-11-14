@@ -1,7 +1,7 @@
 import type { CardScanResult } from '@golf-sg/shared';
 import { describe, expect, it } from 'vitest';
 import { emptyDraft, emptyLayout } from '../components/scorecard';
-import { applyLayout, applyScan, emptyRound } from './apply';
+import { applyLayout, applyScan, cardMarks, emptyRound } from './apply';
 
 const hole = (over: Partial<CardScanResult['holes'][number]>) => ({
   number: 1,
@@ -126,5 +126,47 @@ describe('applyLayout', () => {
     const { layout, holeCount } = applyLayout(blank, { ...scan, pars: [4, 3], tees: [] }, null);
     expect(holeCount).toBe(9);
     expect(layout[0]).toEqual({ par: '4', yardage: blank[0]?.yardage });
+  });
+});
+
+describe('cardMarks', () => {
+  const card = {
+    courseName: 'Pebble Creek',
+    pars: [4, 3],
+    tees: [
+      { name: 'Blue', yardages: [410, 180] },
+      { name: 'White', yardages: [380, 150] },
+    ],
+    holes: [],
+  };
+
+  it('is null for a blank card', () => {
+    expect(cardMarks(card, 0)).toBeNull();
+  });
+
+  it('takes par and the chosen tee yardage from the printed layout', () => {
+    const marks = cardMarks(
+      {
+        ...card,
+        holes: [
+          {
+            number: 2,
+            par: null,
+            yardage: 180,
+            score: 3,
+            drive: null,
+            putts: 2,
+            stats: '20',
+            unsure: false,
+          },
+        ],
+      },
+      1,
+    );
+    expect(marks).toMatchObject({
+      courseName: 'Pebble Creek',
+      tees: 'White',
+      holes: [{ number: 2, par: 3, yardage: 150, score: 3 }],
+    });
   });
 });

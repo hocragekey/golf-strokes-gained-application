@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   bedrockCardReader,
   CARD_LAYOUT_INSTRUCTIONS,
+  CARD_READ_INSTRUCTIONS,
   CARD_SCAN_INSTRUCTIONS,
 } from './card-reader.js';
 
@@ -32,6 +33,27 @@ describe('bedrockCardReader', () => {
       image: { format: 'jpeg', source: { bytes: image } },
     });
     expect(input?.toolConfig?.toolChoice).toEqual({ any: {} });
+  });
+
+  it('reads either kind of card with one prompt that includes the marking guide', async () => {
+    const sent: ConverseCommand[] = [];
+    const card = { courseName: 'Pebble Creek', pars: [4], tees: [], holes: [] };
+    const reader = bedrockCardReader('m', {
+      send: (command) => {
+        sent.push(command);
+        return Promise.resolve({
+          output: {
+            message: {
+              role: 'assistant',
+              content: [{ toolUse: { toolUseId: '1', name: 'record_card', input: card } }],
+            },
+          },
+        } as unknown as ConverseCommandOutput);
+      },
+    });
+    await expect(reader.read(new Uint8Array([1]), 'image/jpeg', 'card')).resolves.toEqual(card);
+    expect(sent[0]?.input.system).toEqual([{ text: CARD_READ_INSTRUCTIONS }]);
+    expect(CARD_READ_INSTRUCTIONS).toContain('two crosses = out of bounds re-tee');
   });
 
   it('reads a blank card with the layout instructions and tool', async () => {

@@ -1,7 +1,7 @@
 import {
-  cardLayoutResultSchema,
+  cardReadResultSchema,
   cardScanResultSchema,
-  type CardLayoutResult,
+  type CardReadResult,
   pullResponseSchema,
   type CardScanRequest,
   type CardScanResult,
@@ -27,7 +27,7 @@ export interface SyncApi {
   deleteAccount(): Promise<void>;
   scanCard(scan: CardScanRequest): Promise<CardScanResult>;
   /** Reads par and every tee row's yardages off a blank card (FR-CARD-07). */
-  readLayout(scan: CardScanRequest): Promise<CardLayoutResult>;
+  readCard(scan: CardScanRequest): Promise<CardReadResult>;
 }
 
 const SCAN_REJECTED: Record<number, string> = {
@@ -81,11 +81,11 @@ export function httpSyncApi(
       cardScanResultSchema.parse(
         await call('/card-scan', { method: 'POST', body: JSON.stringify(scan) }),
       ),
-    readLayout: async (scan) =>
-      cardLayoutResultSchema.parse(
+    readCard: async (scan) =>
+      cardReadResultSchema.parse(
         await call('/card-scan', {
           method: 'POST',
-          body: JSON.stringify({ ...scan, kind: 'layout' }),
+          body: JSON.stringify({ ...scan, kind: 'card' }),
         }),
       ),
   };

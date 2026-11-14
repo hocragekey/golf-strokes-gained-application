@@ -10,8 +10,9 @@ export const MAX_CARD_IMAGE_BYTES = 3_750_000;
 /**
  * `layout`: a blank card before tee-off, read for par and every tee row's yardages.
  * `marks`: a card marked the two-row way after the round.
+ * `card`: either; the layout plus any marks, so one photo button serves both.
  */
-export const CARD_SCAN_KINDS = ['layout', 'marks'] as const;
+export const CARD_SCAN_KINDS = ['layout', 'marks', 'card'] as const;
 export type CardScanKind = (typeof CARD_SCAN_KINDS)[number];
 
 /** Photo reads allowed per Google account, and in total across everyone (FR-CARD-08). */
@@ -63,3 +64,10 @@ export const cardLayoutResultSchema = z.object({
   tees: z.array(z.object({ name: z.string().min(1).max(40), yardages })).max(8),
 });
 export type CardLayoutResult = z.infer<typeof cardLayoutResultSchema>;
+
+/** A card that may be blank or marked: the printed layout plus every hole the golfer scored. */
+export const cardReadResultSchema = cardLayoutResultSchema.extend({
+  /** Empty for a blank card. */
+  holes: z.array(scannedHoleSchema).max(18),
+});
+export type CardReadResult = z.infer<typeof cardReadResultSchema>;

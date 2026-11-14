@@ -2,6 +2,7 @@ import {
   holeEntrySchema,
   parseCardMarks,
   type CardLayoutResult,
+  type CardReadResult,
   type CardScanResult,
 } from '@golf-sg/shared';
 import {
@@ -120,5 +121,23 @@ export function applyLayout(
         yardage: yardage == null ? l.yardage : String(yardage),
       };
     }),
+  };
+}
+
+/**
+ * The golfer's marks from a one-button card photo, with par and yardage taken from the printed
+ * layout and the chosen tee row where the hole itself left them blank. Null for a blank card.
+ */
+export function cardMarks(card: CardReadResult, tee: number | null): CardScanResult | null {
+  if (!card.holes.some((h) => h.score !== null)) return null;
+  const row = tee === null ? undefined : card.tees[tee];
+  return {
+    courseName: card.courseName,
+    tees: row?.name ?? '',
+    holes: card.holes.map((h) => ({
+      ...h,
+      par: h.par ?? card.pars[h.number - 1] ?? null,
+      yardage: row?.yardages[h.number - 1] ?? h.yardage,
+    })),
   };
 }
